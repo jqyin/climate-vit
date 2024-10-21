@@ -35,7 +35,7 @@ class DaliDataLoader(object):
                             device_id = self.device_index,
                             py_num_workers = self.num_data_workers,
                             py_start_method='spawn',
-                            seed = self.model_seed)
+                            seed = self.global_seed)
         
      
         with pipeline: # get input and target 
@@ -85,7 +85,7 @@ class DaliDataLoader(object):
         # this one is the same on all ranks
         self.global_seed = seed
         # this one is the same for all ranks of the same model
-        model_id = comm.get_world_rank() // comm.get_size("model")
+        model_id = comm.get_world_rank() // comm.get_size("tp-cp-pp")
         self.model_seed = self.global_seed + model_id
         # this seed is supposed to be diffferent for every rank
         self.local_seed = self.global_seed + comm.get_world_rank()
