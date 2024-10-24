@@ -81,11 +81,10 @@ def init(params, verbose=False):
     init_process_group()
 
     # set model parallel sizes
-    tp = params.get("tp1", 1)
-    cp = params.get("tp2", 1)
+    tp = params.get("tp", 1)
+    cp = params.get("cp", 1)
     pp = params.get("pp", 1)
     assert pp == 1, "ERROR: pipeline parallel not implemented"
-    assert cp == 1, "ERROR: context parallel (2D TP) not implemented"
     model_parallel_size = tp * cp * pp
     dp = get_world_size() // model_parallel_size
     assert dp >= 1, "ERROR: data parallel wireup failed since dp = {}".format(dp)
@@ -152,9 +151,26 @@ def init_model_parallel_info(tp=1, pp=1, dp=1, cp=1, order="tp-dp", verbose=Fals
 
     # build the different parallel groups
     global _COMM_GROUPS  # others need access to this
-    groups_to_build = ["dp", "tp", "cp", "pp", "tp-cp-pp"]
+    groups_to_build = ["dp", "tp", "cp", "pp", "tp-cp", "dp-cp"]
     for grp in groups_to_build:
         for ranks in generator_wrapper(grp):
             group = dist.new_group(ranks)
             if world_rank in ranks:
                 _COMM_GROUPS[grp] = group
+
+def process_comm_list(input_list):
+    ''' Given a list of comms, merge them 
+    Ex: ['tp', 'cp'] is ['tp-cp'] 
+    '''
+    if not input_list or all(item is None for item in input_list):
+        return []
+    
+    # filter out None values (ex: [None, 'tp] becomes ['tp'])
+    filtered_list = [item for item in input_list if item is not None]
+    
+    if not filtered_list:
+        return []
+    elif len(filtered_list) == 1:
+        return filtered_list
+    else:
+        return ['-'.join(filtered_list)]

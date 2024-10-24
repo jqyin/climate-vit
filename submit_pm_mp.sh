@@ -1,23 +1,22 @@
 #!/bin/bash 
 #SBATCH -C gpu
-#SBATCH -A ntrain4
+#SBATCH -A nstaff
+#SBATCH -q regular
 #SBATCH --ntasks-per-node 4
 #SBATCH --cpus-per-task 32
 #SBATCH --gpus-per-node 4
-#SBATCH --time=01:00:00
-#SBATCH --image=nersc/pytorch:ngc-23.07-v0
-#SBATCH --module=gpu,nccl-2.18
-#SBATCH --reservation=sc23_dl_tutorial_2
+#SBATCH --time=03:00:00
+#SBATCH --image=nersc/pytorch:24.06.01
+#SBATCH --module=gpu,nccl-plugin
 #SBATCH -J vit-era5-mp
 #SBATCH -o %x-%j.out
 
 DATADIR=/pscratch/sd/s/shas1693/data/sc23_tutorial_data/downsampled
-LOGDIR=${SCRATCH}/sc23-dl-tutorial/logs
+LOGDIR=${SCRATCH}/sc24-dl-tutorial/logs
 mkdir -p ${LOGDIR}
 args="${@}"
 #args="--config=mp --row_parallel_size=4"
 
-export FI_MR_CACHE_MONITOR=userfaultfd
 export HDF5_USE_FILE_LOCKING=FALSE
 
 # Profiling
