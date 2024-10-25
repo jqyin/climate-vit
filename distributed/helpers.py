@@ -57,7 +57,6 @@ def _reduce(input_, comm_name):
         return input_
 
     # All-reduce.
-    input_ = input_.contiguous()
     dist.all_reduce(input_.contiguous(), group=comm.get_group(comm_name))
 
     return input_
