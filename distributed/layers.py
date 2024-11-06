@@ -175,8 +175,22 @@ class DistributedAttention(nn.Module):
         self.cp_shapes = cp_shapes
 
         # qkv is col parallel in the weights
-        self.qkv = DistributedMatmul(
-            dim, dim * 3, comm_inp_name=None, comm_out_name=comm_tp_name, bias=qkv_bias,
+        self.q = DistributedMatmul(dim, dim,
+            comm_inp_name=None, 
+            comm_out_name=comm_tp_name, 
+            bias=qkv_bias,
+            comm_act_name=comm_cp_name
+        )
+        self.k = DistributedMatmul(dim, dim,
+            comm_inp_name=None, 
+            comm_out_name=comm_tp_name, 
+            bias=qkv_bias,
+            comm_act_name=comm_cp_name
+        )
+        self.v = DistributedMatmul(dim, dim,
+            comm_inp_name=None, 
+            comm_out_name=comm_tp_name, 
+            bias=qkv_bias,
             comm_act_name=comm_cp_name
         )
         self.attn_drop = nn.Dropout(attn_drop)
@@ -191,22 +205,13 @@ class DistributedAttention(nn.Module):
     def forward(self, x):
         # note: N is local sequence shard if CP is on
         B, N, C = x.shape
+    
+        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
 
-        qkv = (
-            self.qkv(x)
-            .reshape(B, N, 3, self.num_heads_local, self.head_dim)
-            .permute(2, 0, 3, 1, 4)
-        )
-        
-        # don't unbind k and v yet
-        q, kv = qkv[0], qkv[1:].reshape(2, B, self.num_heads_local, N, self.head_dim)
-
-        # all_gather on the kv tensor once for cp (if on)
-        # kv is (2, batch, heads, sequence, head_dim)
-        kv = all_gather_from_parallel_region(kv, dim=3, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-
-        # unbind k and v back from kv after all_gather
-        k, v = kv.unbind(0)
+        k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+        v = all_gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
 
         if self.fused_attn:
             x = F.scaled_dot_product_attention(
