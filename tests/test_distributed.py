@@ -108,7 +108,7 @@ class TestDistributed(unittest.TestCase):
 
     # tests to run with input parameterization
     # inputs are batch, seq, embed, tolerance
-    @parameterized.expand([[4, 1024, 2048, 1e-4], [4, 4096, 2048, 1e-4]])
+    @parameterized.expand([[4, 1024, 2048, 1e-4], [4, 4050, 2048, 1e-4]])
     def test_distributed_mlp(self, batch, seq, embed, tolerance):
         # set the ops
         mlp_layer = MLP(in_features=embed, hidden_features=4 * embed).to(self.device)
@@ -168,7 +168,7 @@ class TestDistributed(unittest.TestCase):
                 / torch.norm(out, p="fro", dim=(-1, -2))
             )
             if self.print_to_screen:
-                print(f"final relative error of output: {err.item()}")
+                print(f"final relative error of output in mlp: {err.item()}")
         self.assertTrue(err.item() <= tolerance)
 
         #############################################################
@@ -183,7 +183,7 @@ class TestDistributed(unittest.TestCase):
                 / torch.norm(inp_grad, p="fro", dim=(-1, -2))
             )
             if self.print_to_screen:
-                print(f"final relative error of gradients: {err.item()}")
+                print(f"final relative error of gradients in mlp: {err.item()}")
         self.assertTrue(err.item() <= tolerance)
 
     def _copy_attn_weights(self, attn_layer, attn_layer_distributed):
@@ -219,7 +219,7 @@ class TestDistributed(unittest.TestCase):
 
     # tests to run with input parameterization
     # inputs are batch, seq, embed, num_heads, tolerance
-    @parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4096, 2048, 8, 1e-4]])
+    @parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4050, 2048, 8, 1e-4]])
     def test_distributed_attention(self, batch, seq, embed, num_heads, tolerance):
         # set the ops
         attn_layer = Attention(dim=embed, num_heads=num_heads, qkv_bias=True).to(
@@ -283,7 +283,7 @@ class TestDistributed(unittest.TestCase):
                 / torch.norm(out, p="fro", dim=(-1, -2))
             )
             if self.print_to_screen:
-                print(f"final relative error of output: {err.item()}")
+                print(f"final relative error of output in sa: {err.item()}")
         self.assertTrue(err.item() <= tolerance)
 
         #############################################################
@@ -298,7 +298,7 @@ class TestDistributed(unittest.TestCase):
                 / torch.norm(inp_grad, p="fro", dim=(-1, -2))
             )
             if self.print_to_screen:
-                print(f"final relative error of gradients: {err.item()}")
+                print(f"final relative error of gradients in sa: {err.item()}")
         self.assertTrue(err.item() <= tolerance)
 
 
