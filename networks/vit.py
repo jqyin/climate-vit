@@ -6,7 +6,19 @@ from networks.helpers import DropPath, trunc_normal_
 
 # mp stuff
 from utils import comm
-from distributed.layers import DistributedMatmul, DistributedMLP, DistributedAttention
+from distributed.layers import (
+    DistributedMatmul, 
+    DistributedMLP, 
+    DistributedAttention,
+    DistributedLayerNorm
+)
+from distributed.helpers import (
+    compute_split_shapes
+)
+from distributed.mappings import (
+    scatter_to_parallel_region,
+    gather_from_parallel_region
+)
 
 class MLP(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -32,10 +44,8 @@ class Attention(nn.Module):
             dim,
             num_heads=8,
             qkv_bias=False,
-            qk_norm=False,
             attn_drop=0.,
-            proj_drop=0.,
-            norm_layer=nn.LayerNorm,
+            proj_drop=0.
     ):
         super().__init__()
         assert dim % num_heads == 0, 'dim should be divisible by num_heads'
@@ -44,18 +54,20 @@ class Attention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.fused_attn = True 
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
-        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+#        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.k = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v = nn.Linear(dim, dim, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x):
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)
-        q, k = self.q_norm(q), self.k_norm(k)
+
+        q = self.q(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         if self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -74,37 +86,40 @@ class Attention(nn.Module):
         x = self.proj_drop(x)
         return x
 
-
 class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm,
-                 comm_inp_name="col_matmul", comm_hidden_name="row_matmul"):
+                 cp_shapes=None):
         super().__init__()
 
-        if (comm.get_size(comm_inp_name) * comm.get_size(comm_hidden_name)) > 1:
-            self.attn = DistributedAttention(
-                dim, comm_inp_name=comm_inp_name, comm_hidden_name=comm_hidden_name,
-                num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop,
-                norm_layer=norm_layer)
-        else:
-            self.attn = Attention(
-                dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop,
-                norm_layer=norm_layer)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-
-        self.norm1 = norm_layer(dim)
-        self.norm2 = norm_layer(dim)
-
         mlp_hidden_dim = int(dim * mlp_ratio)
-         
-        # distribute MLP for model parallelism
-        if (comm.get_size(comm_inp_name) * comm.get_size(comm_hidden_name)) > 1:
-            self.mlp = DistributedMLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop,
-                                      comm_inp_name=comm_inp_name,
-                                      comm_hidden_name=comm_hidden_name
-                                      )
+
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        if (comm.get_size('tp-cp')) > 1:
+            # model parallelism is on, distribute the layers
+            # tp: tensor parallel shards the weights
+            # cp: context parallel shards the sequence
+            self.attn = DistributedAttention(
+                dim, 
+                num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop,
+                comm_tp_name='tp',
+                comm_cp_name='cp',
+                cp_shapes=cp_shapes
+            )
+            self.mlp = DistributedMLP(
+                in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop,
+                comm_tp_name='tp',
+                comm_cp_name='cp'
+            )
+            self.norm1 = DistributedLayerNorm(dim, comm_tp_name='tp', comm_cp_name='cp')
+            self.norm2 = DistributedLayerNorm(dim, comm_tp_name='tp', comm_cp_name='cp')
         else:
+            self.norm1 = norm_layer(dim)
+            self.norm2 = norm_layer(dim)
+            self.attn = Attention(
+                dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
             self.mlp = MLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+
 
     def forward(self, x):
         y = self.attn(self.norm1(x))
@@ -137,18 +152,19 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=[224, 224], patch_size=16, in_chans=3, out_chans=3, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., norm_layer=nn.LayerNorm,
-                 comm_inp_name="col_matmul", comm_hidden_name="row_matmul", **kwargs):
+                 **kwargs):
         super().__init__()
         self.num_features = self.embed_dim = embed_dim
         self.patch_size = patch_size
         self.img_size = img_size
         self.out_ch = out_chans
         self.drop_rate = drop_rate
-        self.comm_inp_name = comm_inp_name
-        self.comm_hidden_name = comm_hidden_name
 
         self.patch_embed = PatchEmbed(img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=self.embed_dim)
         num_patches = self.patch_embed.num_patches
+
+        # if context parallel, split the sequence/context
+        self.cp_shapes = compute_split_shapes(num_patches, comm.get_size("cp"))
 
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, self.embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
@@ -159,7 +175,7 @@ class VisionTransformer(nn.Module):
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
-                comm_inp_name=comm_inp_name, comm_hidden_name=comm_hidden_name)
+                cp_shapes=self.cp_shapes)
             for i in range(depth)])
 
         self.norm = norm_layer(embed_dim)
@@ -202,9 +218,18 @@ class VisionTransformer(nn.Module):
  
     def forward(self, x):
         x = self.prepare_tokens(x)
+
+        # split sequence if cp is on (shape of x is (batch, seq, embed))
+        x = scatter_to_parallel_region(x, dim=1, comm_name="cp")
+
+        # if cp is on, each block operates on a sequence shard
         for blk in self.blocks:
             x = blk(x)
         x = self.norm(x)
+
+        # gather sequence if cp is on
+        x = gather_from_parallel_region(x, dim=1, shapes=self.cp_shapes, comm_name="cp")
+
         x = self.forward_head(x)
         return x
 
