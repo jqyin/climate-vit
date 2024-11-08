@@ -1,19 +1,18 @@
 #!/bin/bash 
 #SBATCH -C gpu 
 #SBATCH -q shared
-#SBATCH -A ntrain4
+#SBATCH -A dasrepo
 #SBATCH --cpus-per-task 32
 #SBATCH --gpus-per-task 1
 #SBATCH --gpu-bind none
 #SBATCH --time=01:00:00
-#SBATCH --image=nersc/pytorch:ngc-23.07-v0
-#SBATCH --module=gpu,nccl-2.18
-#SBATCH --reservation=sc23_dl_tutorial_1
+#SBATCH --image=nersc/pytorch:24.06.02
+#SBATCH --module=gpu,nccl-plugin
 #SBATCH -J vit-era5
 #SBATCH -o %x-%j.out
 
 DATADIR=/pscratch/sd/s/shas1693/data/sc23_tutorial_data/downsampled
-LOGDIR=${SCRATCH}/sc23-dl-tutorial/logs
+LOGDIR=${SCRATCH}/sc24-dl-tutorial/logs
 mkdir -p ${LOGDIR}
 args="${@}"
 
