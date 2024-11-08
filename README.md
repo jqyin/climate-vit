@@ -14,9 +14,9 @@ This repository contains the example code material for the SC24 tutorial:
 
 ## Links
 
-Tutorial slides: https://drive.google.com/drive/folders/1wN1bCjHk2iocI6nowuzSugQopAwetCjR?usp=sharing
+Tutorial slides: https://drive.google.com/drive/u/2/folders/1IfHYBBduBOobWEHzeuzoL8zGSKyTGKj9
 
-Join the Slack workspace: https://join.slack.com/t/nersc-dl-tutorial/shared_invite/zt-25yvx25rr-RPWN1UclFvwgnRyr39Qt0w
+Join the Slack workspace: https://join.slack.com/t/nersc-dl-tutorial/shared_invite/zt-2t4ju1dd3-aS6jZ8fJKeJ0PFLsJsomcg
 
 NERSC JupyterHub: https://jupyter.nersc.gov
 
@@ -35,18 +35,19 @@ This will open up a session on a Perlmutter login node, from which you can submi
 
 To begin, start a terminal from JupyterHub and clone this repository with:
 ```bash
-git clone https://github.com/NERSC/sc23-dl-tutorial.git
+git clone https://github.com/NERSC/sc24-dl-tutorial.git
 ```
 You can use the Jupyter file browser to view and edit source files and scripts. For all of the example commands provided below, make sure you are running them from within the top-level folder of the repository. In your terminal, change to the directory with
 ```bash
-cd sc23-dl-tutorial
+cd sc24-dl-tutorial
 ```
 
 For running slurm jobs on Perlmutter, we will use training accounts which are provided under the `ntrain4` project. The slurm script `submit_pm.sh` included in the repository is configured to work automatically as is, but if you submit your own custom jobs via `salloc` or `sbatch` you must include the following flags for slurm:
 * `-A ntrain4_g` is required for training accounts
-* `--reservation=<reservation_name>` is required to access the set of GPU nodes we have reserved for the duration of the tutorial. For the morning session use `<reservation_name>` set to `sc23_dl_tutorial_1`, and for the afternoon session use `<reservation_name>` set to `sc23_dl_tutorial_2` (we have two different size reservations for the single-GPU and multi-GPU sections respectively)
+* `--reservation=<reservation_name>` is required to access the set of GPU nodes we have reserved for the duration of the tutorial. For the morning  session use `<reservation_name>` set to `sc24_dl_tutorial_1`, and for the afternoon session use `<reservation_name>` set to `sc24_dl_tutorial_2` (we have two different size reservations for the single-GPU and multi-GPU sections respectively)
 
-The code can be run using the `nersc/pytorch:ngc-23.07-v0` docker container. On Perlmutter, docker containers are run via [shifter](https://docs.nersc.gov/development/shifter/), and this container is already downloaded and automatically invoked by our job submission scripts. Our container is based on the [NVIDIA NGC 23.07 pytorch container](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-23-07.html), with a few additional packages added.
+The code can be run using the `nersc/pytorch:24.06.02` docker container. On Perlmutter, docker containers are run via
+[shifter](https://docs.nersc.gov/development/shifter/), and this container is already downloaded and automatically invoked by our job submission scripts. Our container is based on the [NVIDIA NGC 24.06 pytorch container](https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel-24-06.html), with a few additional packages added.
 
 ### Installing Nsight Systems
 In this tutorial, we will be generating profile files using NVIDIA Nsight Systems on the remote systems. In order to open and view these
@@ -86,7 +87,7 @@ Based on the selected configuration, the train script will then:
     * Calling `backward()` on the loss value to backpropagate gradients. Note the use of the `grad_scaler` will be explained below when enabling mixed precision.
     * Applying the model to the validation dataset and logging training and validation metrics to visualize in TensorBoard (see if you can find where we construct the TensorBoard `SummaryWriter` and where our specific metrics are logged via the `add_scalar` call).
 
-More info on the model and data can be found in the [slides](https://drive.google.com/drive/folders/1wN1bCjHk2iocI6nowuzSugQopAwetCjR?usp=drive_link). If you are experimenting with this repository after the tutorial date, you can download the data from here: https://portal.nersc.gov/project/dasrepo/pharring/sc23_data.
+More info on the model and data can be found in the [slides](https://drive.google.com/drive/u/2/folders/1IfHYBBduBOobWEHzeuzoL8zGSKyTGKj9). If you are experimenting with this repository after the tutorial date, you can download the data from here: https://portal.nersc.gov/project/dasrepo/pharring/sc23_data.
 Note that you will have to adjust the data path in `submit_pm.sh` to point your personal copy after downloading.
 
 ## Single GPU training
