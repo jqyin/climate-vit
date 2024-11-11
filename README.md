@@ -127,25 +127,26 @@ As our training with the `short` config runs, it should also dump the training m
 
 This is the performance of the baseline script for the first four epochs on a 40GB A100 card with batch size 16 using the `short` config, which limits the number of training and validation samples to 512 and 128 samples respectively:
 ```
-2023-09-26 21:29:00,679 - root - INFO - Starting Training Loop...
-2023-09-26 21:30:08,688 - root - INFO - Time taken for epoch 1 is 63.020848512649536 sec, avg 8.12429556382808 samples/sec
-2023-09-26 21:30:08,690 - root - INFO -   Avg train loss=0.579061
-2023-09-26 21:30:17,316 - root - INFO -   Avg val loss=0.419114
-2023-09-26 21:30:17,316 - root - INFO -   Total validation time: 8.258756637573242 sec
-2023-09-26 21:31:11,898 - root - INFO - Time taken for epoch 2 is 54.578805923461914 sec, avg 9.380930772248819 samples/sec
-2023-09-26 21:31:11,898 - root - INFO -   Avg train loss=0.390744
-2023-09-26 21:31:18,989 - root - INFO -   Avg val loss=0.375897
-2023-09-26 21:31:18,989 - root - INFO -   Total validation time: 6.766376972198486 sec
-2023-09-26 21:32:13,578 - root - INFO - Time taken for epoch 3 is 54.58618688583374 sec, avg 9.37966231403635 samples/sec
-2023-09-26 21:32:13,579 - root - INFO -   Avg train loss=0.356790
-2023-09-26 21:32:20,685 - root - INFO -   Avg val loss=0.353825
-2023-09-26 21:32:20,685 - root - INFO -   Total validation time: 6.767474889755249 sec
-2023-09-26 21:33:15,322 - root - INFO - Time taken for epoch 4 is 54.63401126861572 sec, avg 9.371451740614114 samples/sec
-2023-09-26 21:33:15,322 - root - INFO -   Avg train loss=0.343523
-2023-09-26 21:33:22,444 - root - INFO -   Avg val loss=0.347524
-2023-09-26 21:33:22,444 - root - INFO -   Total validation time: 6.78272819519043 sec
+2024-11-08 22:22:33,936 - root - INFO - Starting Training Loop...
+2024-11-08 22:23:44,157 - root - INFO - Time taken for epoch 1 is 61.425346 sec, avg 8.335321 samples/sec
+2024-11-08 22:23:44,157 - root - INFO -   Avg train loss=0.577775
+2024-11-08 22:23:49,532 - root - INFO -   Avg val loss=0.4210963547229767
+2024-11-08 22:23:49,532 - root - INFO -   Total validation time: 4.699830055236816 sec
+2024-11-08 22:24:44,523 - root - INFO - Time taken for epoch 2 is 54.986979 sec, avg 9.311295 samples/sec
+2024-11-08 22:24:44,524 - root - INFO -   Avg train loss=0.391900
+2024-11-08 22:24:49,493 - root - INFO -   Avg val loss=0.3769605755805969
+2024-11-08 22:24:49,493 - root - INFO -   Total validation time: 4.2772088050842285 sec
+2024-11-08 22:25:47,342 - root - INFO - Time taken for epoch 3 is 57.844953 sec, avg 8.851248 samples/sec
+2024-11-08 22:25:47,343 - root - INFO -   Avg train loss=0.358102
+2024-11-08 22:25:52,339 - root - INFO -   Avg val loss=0.3551669120788574
+2024-11-08 22:25:52,339 - root - INFO -   Total validation time: 4.29000997543335 sec
+2024-11-08 22:26:50,466 - root - INFO - Time taken for epoch 4 is 58.123552 sec, avg 8.808822 samples/sec
+2024-11-08 22:26:50,466 - root - INFO -   Avg train loss=0.345737
+2024-11-08 22:26:56,149 - root - INFO -   Avg val loss=0.3510175347328186
+2024-11-08 22:26:56,149 - root - INFO -   Total validation time: 5.00057053565979 sec
+2024-11-08 22:26:56,155 - root - INFO - DONE ---- rank 0
 ```
-After the first epoch, we see that the throughput achieved is about 9.3 samples/s.
+After the first epoch, we see that the throughput achieved is about 8.8 samples/s.
 
 ### Profiling with Nsight Systems
 #### Adding NVTX ranges and profiler controls
@@ -185,72 +186,78 @@ sbatch -n 1 -t 20 ./submit_pm.sh --config=short --num_data_workers <value of you
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16 and 4 data workers:
 ```
-2023-09-26 21:18:44,034 - root - INFO - Time taken for epoch 1 is 43.38622999191284 sec, avg 11.800979252989633 samples/sec
-2023-09-26 21:18:44,035 - root - INFO -   Avg train loss=0.577452
-2023-09-26 21:18:49,678 - root - INFO -   Avg val loss=0.418861
-2023-09-26 21:18:49,679 - root - INFO -   Total validation time: 5.192107677459717 sec
-2023-09-26 21:19:30,999 - root - INFO - Time taken for epoch 2 is 41.31834650039673 sec, avg 12.391589774655767 samples/sec
-2023-09-26 21:19:31,001 - root - INFO -   Avg train loss=0.390701
-2023-09-26 21:19:36,231 - root - INFO -   Avg val loss=0.372989
-2023-09-26 21:19:36,232 - root - INFO -   Total validation time: 4.828763484954834 sec
-2023-09-26 21:20:17,169 - root - INFO - Time taken for epoch 3 is 40.93515610694885 sec, avg 12.507586355902198 samples/sec
-2023-09-26 21:20:17,171 - root - INFO -   Avg train loss=0.356448
-2023-09-26 21:20:22,409 - root - INFO -   Avg val loss=0.355308
-2023-09-26 21:20:22,409 - root - INFO -   Total validation time: 4.8364222049713135 sec
-2023-09-26 21:21:03,627 - root - INFO - Time taken for epoch 4 is 41.21541452407837 sec, avg 12.42253671137738 samples/sec
-2023-09-26 21:21:03,629 - root - INFO -   Avg train loss=0.343769
-2023-09-26 21:21:08,695 - root - INFO -   Avg val loss=0.347322
-2023-09-26 21:21:08,695 - root - INFO -   Total validation time: 4.662991523742676 sec
+2024-11-08 22:22:33,935 - root - INFO - Starting Training Loop...
+2024-11-08 22:23:25,136 - root - INFO - Time taken for epoch 1 is 41.839162 sec, avg 12.237339 samples/sec
+2024-11-08 22:23:25,136 - root - INFO -   Avg train loss=0.578009
+2024-11-08 22:23:32,344 - root - INFO -   Avg val loss=0.42334920167922974
+2024-11-08 22:23:32,344 - root - INFO -   Total validation time: 6.44074559211731 sec
+2024-11-08 22:24:13,287 - root - INFO - Time taken for epoch 2 is 40.937212 sec, avg 12.506958 samples/sec
+2024-11-08 22:24:13,287 - root - INFO -   Avg train loss=0.392354
+2024-11-08 22:24:18,415 - root - INFO -   Avg val loss=0.3768927752971649
+2024-11-08 22:24:18,415 - root - INFO -   Total validation time: 4.4096503257751465 sec
+2024-11-08 22:24:59,107 - root - INFO - Time taken for epoch 3 is 40.687515 sec, avg 12.583713 samples/sec
+2024-11-08 22:24:59,107 - root - INFO -   Avg train loss=0.358121
+2024-11-08 22:25:04,516 - root - INFO -   Avg val loss=0.3551710247993469
+2024-11-08 22:25:04,516 - root - INFO -   Total validation time: 4.694499492645264 sec
+2024-11-08 22:25:45,206 - root - INFO - Time taken for epoch 4 is 40.685218 sec, avg 12.584423 samples/sec
+2024-11-08 22:25:45,206 - root - INFO -   Avg train loss=0.345953
+2024-11-08 22:25:50,629 - root - INFO -   Avg val loss=0.3512427508831024
+2024-11-08 22:25:50,629 - root - INFO -   Total validation time: 4.708324909210205 sec
+2024-11-08 22:25:50,636 - root - INFO - DONE ---- rank 0
 ```
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16 and 8 data workers:
 ```
-2023-09-26 21:18:59,332 - root - INFO - Time taken for epoch 1 is 45.54166626930237 sec, avg 11.242452065156796 samples/sec
-2023-09-26 21:18:59,333 - root - INFO -   Avg train loss=0.577049
-2023-09-26 21:19:05,821 - root - INFO -   Avg val loss=0.419312
-2023-09-26 21:19:05,821 - root - INFO -   Total validation time: 6.034433841705322 sec
-2023-09-26 21:19:47,276 - root - INFO - Time taken for epoch 2 is 41.4513418674469 sec, avg 12.351831736527942 samples/sec
-2023-09-26 21:19:47,277 - root - INFO -   Avg train loss=0.389672
-2023-09-26 21:19:53,126 - root - INFO -   Avg val loss=0.373399
-2023-09-26 21:19:53,126 - root - INFO -   Total validation time: 5.442654848098755 sec
-2023-09-26 21:20:36,164 - root - INFO - Time taken for epoch 3 is 43.03392195701599 sec, avg 11.897590940268149 samples/sec
-2023-09-26 21:20:36,165 - root - INFO -   Avg train loss=0.355648
-2023-09-26 21:20:41,650 - root - INFO -   Avg val loss=0.353144
-2023-09-26 21:20:41,650 - root - INFO -   Total validation time: 5.0764687061309814 sec
-2023-09-26 21:21:24,205 - root - INFO - Time taken for epoch 4 is 42.55116081237793 sec, avg 12.032574205380119 samples/sec
-2023-09-26 21:21:24,206 - root - INFO -   Avg train loss=0.342547
-2023-09-26 21:21:30,034 - root - INFO -   Avg val loss=0.346312
-2023-09-26 21:21:30,034 - root - INFO -   Total validation time: 5.32970404624939 sec
+2024-11-08 22:33:04,071 - root - INFO - Starting Training Loop...
+2024-11-08 22:34:10,343 - root - INFO - Time taken for epoch 1 is 49.274928 sec, avg 10.390680 samples/sec
+2024-11-08 22:34:10,344 - root - INFO -   Avg train loss=0.580136
+2024-11-08 22:34:18,993 - root - INFO -   Avg val loss=0.42055439949035645
+2024-11-08 22:34:18,994 - root - INFO -   Total validation time: 6.965803146362305 sec
+2024-11-08 22:35:01,671 - root - INFO - Time taken for epoch 2 is 42.671460 sec, avg 11.998652 samples/sec
+2024-11-08 22:35:01,671 - root - INFO -   Avg train loss=0.389015
+2024-11-08 22:35:08,971 - root - INFO -   Avg val loss=0.3716721534729004
+2024-11-08 22:35:08,972 - root - INFO -   Total validation time: 6.574234485626221 sec
+2024-11-08 22:35:52,249 - root - INFO - Time taken for epoch 3 is 43.268373 sec, avg 11.833123 samples/sec
+2024-11-08 22:35:52,249 - root - INFO -   Avg train loss=0.353931
+2024-11-08 22:35:59,464 - root - INFO -   Avg val loss=0.3521949052810669
+2024-11-08 22:35:59,465 - root - INFO -   Total validation time: 6.2647905349731445 sec
+2024-11-08 22:36:41,921 - root - INFO - Time taken for epoch 4 is 42.450545 sec, avg 12.061094 samples/sec
+2024-11-08 22:36:41,922 - root - INFO -   Avg train loss=0.342995
+2024-11-08 22:36:49,203 - root - INFO -   Avg val loss=0.34849825501441956
+2024-11-08 22:36:49,203 - root - INFO -   Total validation time: 6.588480234146118 sec
+2024-11-08 22:36:49,216 - root - INFO - DONE ---- rank 0
 ```
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16 and 16 data workers:
 ```
-2023-09-26 21:27:28,037 - root - INFO - Time taken for epoch 1 is 47.84179139137268 sec, avg 10.701940397915974 samples/sec
-2023-09-26 21:27:28,037 - root - INFO -   Avg train loss=0.575174
-2023-09-26 21:27:34,156 - root - INFO -   Avg val loss=0.418625
-2023-09-26 21:27:34,156 - root - INFO -   Total validation time: 5.6687445640563965 sec
-2023-09-26 21:28:20,330 - root - INFO - Time taken for epoch 2 is 46.170273542404175 sec, avg 11.089386324076328 samples/sec
-2023-09-26 21:28:20,331 - root - INFO -   Avg train loss=0.388281
-2023-09-26 21:28:25,466 - root - INFO -   Avg val loss=0.373171
-2023-09-26 21:28:25,467 - root - INFO -   Total validation time: 4.725477695465088 sec
-2023-09-26 21:29:11,989 - root - INFO - Time taken for epoch 3 is 46.51985311508179 sec, avg 11.006053667740602 samples/sec
-2023-09-26 21:29:11,991 - root - INFO -   Avg train loss=0.354430
-2023-09-26 21:29:17,389 - root - INFO -   Avg val loss=0.351720
-2023-09-26 21:29:17,390 - root - INFO -   Total validation time: 4.990921974182129 sec
-2023-09-26 21:30:02,644 - root - INFO - Time taken for epoch 4 is 45.25181460380554 sec, avg 11.314463397384783 samples/sec
-2023-09-26 21:30:02,645 - root - INFO -   Avg train loss=0.341476
-2023-09-26 21:30:07,853 - root - INFO -   Avg val loss=0.345648
-2023-09-26 21:30:07,853 - root - INFO -   Total validation time: 4.801238775253296 sec
+2024-11-08 22:32:35,663 - root - INFO - Starting Training Loop...
+2024-11-08 22:34:04,500 - root - INFO - Time taken for epoch 1 is 65.897243 sec, avg 7.769672 samples/sec
+2024-11-08 22:34:04,724 - root - INFO -   Avg train loss=0.582703
+2024-11-08 22:34:15,814 - root - INFO -   Avg val loss=0.4232867658138275
+2024-11-08 22:34:15,815 - root - INFO -   Total validation time: 8.690808534622192 sec
+2024-11-08 22:35:03,052 - root - INFO - Time taken for epoch 2 is 47.233428 sec, avg 10.839781 samples/sec
+2024-11-08 22:35:03,053 - root - INFO -   Avg train loss=0.391875
+2024-11-08 22:35:09,827 - root - INFO -   Avg val loss=0.3750896453857422
+2024-11-08 22:35:09,827 - root - INFO -   Total validation time: 6.063593864440918 sec
+2024-11-08 22:35:57,232 - root - INFO - Time taken for epoch 3 is 47.399871 sec, avg 10.801717 samples/sec
+2024-11-08 22:35:57,233 - root - INFO -   Avg train loss=0.356944
+2024-11-08 22:36:03,111 - root - INFO -   Avg val loss=0.35426992177963257
+2024-11-08 22:36:03,111 - root - INFO -   Total validation time: 5.161340951919556 sec
+2024-11-08 22:36:51,289 - root - INFO - Time taken for epoch 4 is 48.173742 sec, avg 10.628197 samples/sec
+2024-11-08 22:36:51,291 - root - INFO -   Avg train loss=0.345093
+2024-11-08 22:36:59,318 - root - INFO -   Avg val loss=0.35053959488868713
+2024-11-08 22:36:59,318 - root - INFO -   Total validation time: 6.992695569992065 sec
+2024-11-08 22:36:59,466 - root - INFO - DONE ---- rank 0
 ```
 
-Increasing the number of workers to 4 improves throughput to around 12.4 samples per second, while increasing to more workers yields a slight degradation in performance.
+Increasing the number of workers to 4 improves throughput to around 12.5 samples per second, while increasing to more workers yields a slight degradation in performance.
 
 We can run the 4 worker configuration through profiler using the instructions in the previous section with the added `--num_data_workers`
 argument and load that profile in Nsight Systems. This is what this profile ([`4workers.nsys-rep`](sample_nsys_profiles/4workers.nsys-rep)) looks like:
-![NSYS Native Data](tutorial_images/nsys_nativedata_4workers.png)
+![NSYS Native Data](tutorial_images/nsys_4workers.png)
 
 and zoomed in:
-![NSYS Native Data Zoomed](tutorial_images/nsys_nativedata_4workers_zoomed.png)
+![NSYS Native Data Zoomed](tutorial_images/nsys_4workers_zoomed.png)
 
 With 4 data workers, the idle gaps between steps are resolved, improving the throughput. Looking at the zoomed in profile, we
 still see that the H2D copy in of the input data (i.e. the light green activity at the beginning of the step) takes some time and runs in same CUDA stream as the compute. One option here is to implement a prefetching
@@ -277,22 +284,24 @@ sbatch -n 1 -t 20 ./submit_pm.sh --config=short --num_data_workers 8 --data_load
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16 and DALI:
 ```
-2023-09-26 22:01:24,018 - root - INFO - Time taken for epoch 1 is 38.48570990562439 sec, avg 12.887900501674608 samples/sec
-2023-09-26 22:01:24,020 - root - INFO -   Avg train loss=0.587751
-2023-09-26 22:01:28,215 - root - INFO -   Avg val loss=0.425913
-2023-09-26 22:01:28,215 - root - INFO -   Total validation time: 3.625275135040283 sec
-2023-09-26 22:02:06,757 - root - INFO - Time taken for epoch 2 is 38.5366051197052 sec, avg 13.286069138928777 samples/sec
-2023-09-26 22:02:06,759 - root - INFO -   Avg train loss=0.394755
-2023-09-26 22:02:10,374 - root - INFO -   Avg val loss=0.376960
-2023-09-26 22:02:10,375 - root - INFO -   Total validation time: 3.0912325382232666 sec
-2023-09-26 22:02:48,918 - root - INFO - Time taken for epoch 3 is 38.53870248794556 sec, avg 13.285346079312022 samples/sec
-2023-09-26 22:02:48,921 - root - INFO -   Avg train loss=0.359927
-2023-09-26 22:02:52,485 - root - INFO -   Avg val loss=0.355281
-2023-09-26 22:02:52,485 - root - INFO -   Total validation time: 3.052870988845825 sec
-2023-09-26 22:03:31,039 - root - INFO - Time taken for epoch 4 is 38.549081325531006 sec, avg 13.281769173080217 samples/sec
-2023-09-26 22:03:31,041 - root - INFO -   Avg train loss=0.345901
-2023-09-26 22:03:34,623 - root - INFO -   Avg val loss=0.349484
-2023-09-26 22:03:34,623 - root - INFO -   Total validation time: 3.0705220699310303 sec
+2024-11-08 22:37:59,065 - root - INFO - Starting Training Loop...
+2024-11-08 22:38:44,454 - root - INFO - Time taken for epoch 1 is 39.402637 sec, avg 12.587990 samples/sec
+2024-11-08 22:38:44,455 - root - INFO -   Avg train loss=0.585512
+2024-11-08 22:38:48,948 - root - INFO -   Avg val loss=0.4250042140483856
+2024-11-08 22:38:48,949 - root - INFO -   Total validation time: 3.4734890460968018 sec
+2024-11-08 22:39:27,755 - root - INFO - Time taken for epoch 2 is 38.802052 sec, avg 13.195178 samples/sec
+2024-11-08 22:39:27,755 - root - INFO -   Avg train loss=0.394654
+2024-11-08 22:39:31,048 - root - INFO -   Avg val loss=0.3783586919307709
+2024-11-08 22:39:31,048 - root - INFO -   Total validation time: 2.4079525470733643 sec
+2024-11-08 22:40:09,843 - root - INFO - Time taken for epoch 3 is 38.791212 sec, avg 13.198866 samples/sec
+2024-11-08 22:40:09,843 - root - INFO -   Avg train loss=0.359940
+2024-11-08 22:40:13,064 - root - INFO -   Avg val loss=0.3566215932369232
+2024-11-08 22:40:13,065 - root - INFO -   Total validation time: 2.3287765979766846 sec
+2024-11-08 22:40:51,877 - root - INFO - Time taken for epoch 4 is 38.809587 sec, avg 13.192617 samples/sec
+2024-11-08 22:40:51,878 - root - INFO -   Avg train loss=0.347299
+2024-11-08 22:40:55,174 - root - INFO -   Avg val loss=0.35257285833358765
+2024-11-08 22:40:55,174 - root - INFO -   Total validation time: 2.403442859649658 sec
+2024-11-08 22:40:57,976 - root - INFO - DONE ---- rank 0
 ```
 
 We can run the DALI case through profiler using the instructions in the earlier section with the added `--data_loader_config=dali`
@@ -319,22 +328,24 @@ NVIDIA_TF32_OVERRIDE=0 sbatch -n 1 -t 20 ./submit_pm.sh --config=short --num_dat
 ```
 yields the following result for 4 epochs:
 ```
-2023-09-26 22:37:05,159 - root - INFO - Time taken for epoch 1 is 50.52403998374939 sec, avg 9.817108848768507 samples/sec
-2023-09-26 22:37:05,160 - root - INFO -   Avg train loss=0.585963
-2023-09-26 22:37:10,101 - root - INFO -   Avg val loss=0.428734
-2023-09-26 22:37:10,102 - root - INFO -   Total validation time: 4.387829065322876 sec
-2023-09-26 22:38:00,735 - root - INFO - Time taken for epoch 2 is 50.62814474105835 sec, avg 10.112952047100768 samples/sec
-2023-09-26 22:38:00,736 - root - INFO -   Avg train loss=0.394807
-2023-09-26 22:38:05,347 - root - INFO -   Avg val loss=0.378771
-2023-09-26 22:38:05,348 - root - INFO -   Total validation time: 4.096112012863159 sec
-2023-09-26 22:38:55,989 - root - INFO - Time taken for epoch 3 is 50.63650107383728 sec, avg 10.111283148363873 samples/sec
-2023-09-26 22:38:55,991 - root - INFO -   Avg train loss=0.360278
-2023-09-26 22:39:00,564 - root - INFO -   Avg val loss=0.355521
-2023-09-26 22:39:00,564 - root - INFO -   Total validation time: 4.063924789428711 sec
-2023-09-26 22:39:51,199 - root - INFO - Time taken for epoch 4 is 50.62860679626465 sec, avg 10.112859752596927 samples/sec
-2023-09-26 22:39:51,200 - root - INFO -   Avg train loss=0.345876
-2023-09-26 22:39:55,772 - root - INFO -   Avg val loss=0.349507
-2023-09-26 22:39:55,773 - root - INFO -   Total validation time: 4.065291404724121 sec
+2024-11-08 22:37:54,924 - root - INFO - Starting Training Loop...
+2024-11-08 22:38:52,057 - root - INFO - Time taken for epoch 1 is 51.186309 sec, avg 9.690091 samples/sec
+2024-11-08 22:38:52,058 - root - INFO -   Avg train loss=0.582846
+2024-11-08 22:38:57,213 - root - INFO -   Avg val loss=0.42485159635543823
+2024-11-08 22:38:57,213 - root - INFO -   Total validation time: 3.4062464237213135 sec
+2024-11-08 22:39:48,037 - root - INFO - Time taken for epoch 2 is 50.818667 sec, avg 10.075038 samples/sec
+2024-11-08 22:39:48,038 - root - INFO -   Avg train loss=0.394966
+2024-11-08 22:39:52,369 - root - INFO -   Avg val loss=0.3786458373069763
+2024-11-08 22:39:52,369 - root - INFO -   Total validation time: 3.182037830352783 sec
+2024-11-08 22:40:43,191 - root - INFO - Time taken for epoch 3 is 50.818349 sec, avg 10.075101 samples/sec
+2024-11-08 22:40:43,193 - root - INFO -   Avg train loss=0.358938
+2024-11-08 22:40:47,524 - root - INFO -   Avg val loss=0.355423241853714
+2024-11-08 22:40:47,525 - root - INFO -   Total validation time: 3.195657730102539 sec
+2024-11-08 22:41:38,333 - root - INFO - Time taken for epoch 4 is 50.805618 sec, avg 10.077626 samples/sec
+2024-11-08 22:41:38,334 - root - INFO -   Avg train loss=0.346205
+2024-11-08 22:41:42,673 - root - INFO -   Avg val loss=0.35154277086257935
+2024-11-08 22:41:42,674 - root - INFO -   Total validation time: 3.193145751953125 sec
+2024-11-08 22:41:45,642 - root - INFO - DONE ---- rank 0
 ```
 From here, we can see that running in FP32 without TF32 acceleration is reduced, hence we are seeing some benefits from
 TF32 Tensor Core operations without any code changes to add AMP. With that said, AMP can still provide more performance improvement for A100 GPUs,
@@ -352,45 +363,49 @@ for AMP with BF16 precision.
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16, DALI, and AMP FP16:
 ```
-2023-09-26 22:42:50,782 - root - INFO - Time taken for epoch 1 is 13.934328317642212 sec, avg 35.59554423387713 samples/sec
-2023-09-26 22:42:50,782 - root - INFO -   Avg train loss=0.585250
-2023-09-26 22:42:53,841 - root - INFO -   Avg val loss=0.427797
-2023-09-26 22:42:53,841 - root - INFO -   Total validation time: 2.5032312870025635 sec
-2023-09-26 22:43:05,905 - root - INFO - Time taken for epoch 2 is 12.058186531066895 sec, avg 42.46077954432662 samples/sec
-2023-09-26 22:43:05,906 - root - INFO -   Avg train loss=0.396558
-2023-09-26 22:43:07,896 - root - INFO -   Avg val loss=0.381889
-2023-09-26 22:43:07,896 - root - INFO -   Total validation time: 1.4918978214263916 sec
-2023-09-26 22:43:19,939 - root - INFO - Time taken for epoch 3 is 12.037509441375732 sec, avg 42.53371534149218 samples/sec
-2023-09-26 22:43:19,940 - root - INFO -   Avg train loss=0.362181
-2023-09-26 22:43:21,919 - root - INFO -   Avg val loss=0.357079
-2023-09-26 22:43:21,919 - root - INFO -   Total validation time: 1.4730119705200195 sec
-2023-09-26 22:43:33,977 - root - INFO - Time taken for epoch 4 is 12.047151803970337 sec, avg 42.499671983153895 samples/sec
-2023-09-26 22:43:33,978 - root - INFO -   Avg train loss=0.347396
-2023-09-26 22:43:35,959 - root - INFO -   Avg val loss=0.351097
-2023-09-26 22:43:35,960 - root - INFO -   Total validation time: 1.48984694480896 sec
+2024-11-08 22:49:25,606 - root - INFO - Starting Training Loop...
+2024-11-08 22:49:41,559 - root - INFO - Time taken for epoch 1 is 12.106652 sec, avg 40.969213 samples/sec
+2024-11-08 22:49:41,560 - root - INFO -   Avg train loss=0.588574
+2024-11-08 22:49:43,521 - root - INFO -   Avg val loss=0.4253874123096466
+2024-11-08 22:49:43,522 - root - INFO -   Total validation time: 1.3648040294647217 sec
+2024-11-08 22:49:53,089 - root - INFO - Time taken for epoch 2 is 9.562447 sec, avg 53.542780 samples/sec
+2024-11-08 22:49:53,090 - root - INFO -   Avg train loss=0.392289
+2024-11-08 22:49:54,732 - root - INFO -   Avg val loss=0.3753000795841217
+2024-11-08 22:49:54,732 - root - INFO -   Total validation time: 1.146265983581543 sec
+2024-11-08 22:50:04,338 - root - INFO - Time taken for epoch 3 is 9.600298 sec, avg 53.331678 samples/sec
+2024-11-08 22:50:04,339 - root - INFO -   Avg train loss=0.356447
+2024-11-08 22:50:05,949 - root - INFO -   Avg val loss=0.3536761701107025
+2024-11-08 22:50:05,950 - root - INFO -   Total validation time: 1.114877462387085 sec
+2024-11-08 22:50:15,578 - root - INFO - Time taken for epoch 4 is 9.591419 sec, avg 53.381050 samples/sec
+2024-11-08 22:50:15,579 - root - INFO -   Avg train loss=0.344073
+2024-11-08 22:50:17,229 - root - INFO -   Avg val loss=0.34965115785598755
+2024-11-08 22:50:17,230 - root - INFO -   Total validation time: 1.1637003421783447 sec
+2024-11-08 22:50:19,890 - root - INFO - DONE ---- rank 0
 ```
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16, DALI, and AMP BF16:
 ```
-2023-09-26 22:55:22,111 - root - INFO - Time taken for epoch 1 is 13.740016222000122 sec, avg 36.09893845727918 samples/sec
-2023-09-26 22:55:22,112 - root - INFO -   Avg train loss=0.581764
-2023-09-26 22:55:25,160 - root - INFO -   Avg val loss=0.423542
-2023-09-26 22:55:25,161 - root - INFO -   Total validation time: 2.495091438293457 sec
-2023-09-26 22:55:37,176 - root - INFO - Time taken for epoch 2 is 12.007216453552246 sec, avg 42.64102358615585 samples/sec
-2023-09-26 22:55:37,177 - root - INFO -   Avg train loss=0.392484
-2023-09-26 22:55:39,214 - root - INFO -   Avg val loss=0.374372
-2023-09-26 22:55:39,214 - root - INFO -   Total validation time: 1.5221989154815674 sec
-2023-09-26 22:55:51,228 - root - INFO - Time taken for epoch 3 is 12.009136199951172 sec, avg 42.63420711325447 samples/sec
-2023-09-26 22:55:51,229 - root - INFO -   Avg train loss=0.357453
-2023-09-26 22:55:53,237 - root - INFO -   Avg val loss=0.353668
-2023-09-26 22:55:53,237 - root - INFO -   Total validation time: 1.491905927658081 sec
-2023-09-26 22:56:05,255 - root - INFO - Time taken for epoch 4 is 12.012868881225586 sec, avg 42.620959661033474 samples/sec
-2023-09-26 22:56:05,256 - root - INFO -   Avg train loss=0.343864
-2023-09-26 22:56:07,237 - root - INFO -   Avg val loss=0.347740
-2023-09-26 22:56:07,237 - root - INFO -   Total validation time: 1.470574140548706 sec
+2024-11-08 22:47:40,862 - root - INFO - Starting Training Loop...
+2024-11-08 22:47:53,712 - root - INFO - Time taken for epoch 1 is 10.929039 sec, avg 45.383678 samples/sec
+2024-11-08 22:47:53,712 - root - INFO -   Avg train loss=0.583080
+2024-11-08 22:47:55,830 - root - INFO -   Avg val loss=0.4219505488872528
+2024-11-08 22:47:55,831 - root - INFO -   Total validation time: 1.5665509700775146 sec
+2024-11-08 22:48:05,335 - root - INFO - Time taken for epoch 2 is 9.484557 sec, avg 53.982490 samples/sec
+2024-11-08 22:48:05,337 - root - INFO -   Avg train loss=0.391346
+2024-11-08 22:48:06,721 - root - INFO -   Avg val loss=0.37473177909851074
+2024-11-08 22:48:06,722 - root - INFO -   Total validation time: 0.9229915142059326 sec
+2024-11-08 22:48:16,257 - root - INFO - Time taken for epoch 3 is 9.529652 sec, avg 53.727041 samples/sec
+2024-11-08 22:48:16,258 - root - INFO -   Avg train loss=0.356134
+2024-11-08 22:48:17,566 - root - INFO -   Avg val loss=0.35337957739830017
+2024-11-08 22:48:17,566 - root - INFO -   Total validation time: 0.8619468212127686 sec
+2024-11-08 22:48:27,196 - root - INFO - Time taken for epoch 4 is 9.622881 sec, avg 53.206519 samples/sec
+2024-11-08 22:48:27,196 - root - INFO -   Avg train loss=0.343957
+2024-11-08 22:48:28,462 - root - INFO -   Avg val loss=0.34935176372528076
+2024-11-08 22:48:28,463 - root - INFO -   Total validation time: 0.8311541080474854 sec
+2024-11-08 22:48:31,262 - root - INFO - DONE ---- rank 0
 ```
 
-For this model, we see a massive improvement when using AMP with either FP16 or BF16 precision, improving throughput to over 42 samples/s in each case. BF16 has a slight edge over FP16 due to the lack of loss scaling.
+For this model, we see a massive improvement when using AMP with either FP16 or BF16 precision, improving throughput to over 53 samples/s in each case. BF16 may have a slight edge over FP16 due to the lack of loss scaling.
 
 We can run the case with AMP BF16 enabled through profiler using the instructions in the earlier section with the added `--amp_mode=bf16`
 argument and load that profile in Nsight Systems. This is what this profile ([`dali_amp_bf16.nsys-rep`](sample_nsys_profiles/dali_amp_bf16.nsys-rep)) looks like:
@@ -417,22 +432,24 @@ sbatch -n 1 -t 20 ./submit_pm.sh --config=short --num_data_workers 8 --data_load
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16, DALI, and AMP, and the fused optimizer:
 ```
-2023-09-26 23:06:32,768 - root - INFO - Time taken for epoch 1 is 13.392464637756348 sec, avg 37.0357520752129 samples/sec
-2023-09-26 23:06:32,769 - root - INFO -   Avg train loss=0.587116
-2023-09-26 23:06:35,805 - root - INFO -   Avg val loss=0.428104
-2023-09-26 23:06:35,806 - root - INFO -   Total validation time: 2.46842885017395 sec
-2023-09-26 23:06:47,807 - root - INFO - Time taken for epoch 2 is 11.996378421783447 sec, avg 42.67954727655909 samples/sec
-2023-09-26 23:06:47,808 - root - INFO -   Avg train loss=0.395509
-2023-09-26 23:06:49,794 - root - INFO -   Avg val loss=0.377574
-2023-09-26 23:06:49,794 - root - INFO -   Total validation time: 1.474884033203125 sec
-2023-09-26 23:07:01,795 - root - INFO - Time taken for epoch 3 is 11.994306564331055 sec, avg 42.686919602555214 samples/sec
-2023-09-26 23:07:01,796 - root - INFO -   Avg train loss=0.359626
-2023-09-26 23:07:03,782 - root - INFO -   Avg val loss=0.356546
-2023-09-26 23:07:03,782 - root - INFO -   Total validation time: 1.4720070362091064 sec
-2023-09-26 23:07:15,797 - root - INFO - Time taken for epoch 4 is 12.009339809417725 sec, avg 42.63348428183284 samples/sec
-2023-09-26 23:07:15,798 - root - INFO -   Avg train loss=0.345925
-2023-09-26 23:07:17,786 - root - INFO -   Avg val loss=0.349518
-2023-09-26 23:07:17,786 - root - INFO -   Total validation time: 1.4778716564178467 sec
+2024-11-08 22:58:04,258 - root - INFO - Starting Training Loop...
+2024-11-08 22:58:22,345 - root - INFO - Time taken for epoch 1 is 11.567046 sec, avg 42.880437 samples/sec
+2024-11-08 22:58:22,346 - root - INFO -   Avg train loss=0.582076
+2024-11-08 22:58:25,935 - root - INFO -   Avg val loss=0.4246356189250946
+2024-11-08 22:58:25,935 - root - INFO -   Total validation time: 2.871800661087036 sec
+2024-11-08 22:58:35,542 - root - INFO - Time taken for epoch 2 is 9.598705 sec, avg 53.340527 samples/sec
+2024-11-08 22:58:35,543 - root - INFO -   Avg train loss=0.390996
+2024-11-08 22:58:37,404 - root - INFO -   Avg val loss=0.37491661310195923
+2024-11-08 22:58:37,405 - root - INFO -   Total validation time: 1.291959285736084 sec
+2024-11-08 22:58:46,997 - root - INFO - Time taken for epoch 3 is 9.585611 sec, avg 53.413394 samples/sec
+2024-11-08 22:58:46,998 - root - INFO -   Avg train loss=0.356147
+2024-11-08 22:58:48,816 - root - INFO -   Avg val loss=0.3527429699897766
+2024-11-08 22:58:48,817 - root - INFO -   Total validation time: 1.279505729675293 sec
+2024-11-08 22:58:58,428 - root - INFO - Time taken for epoch 4 is 9.603735 sec, avg 53.312592 samples/sec
+2024-11-08 22:58:58,429 - root - INFO -   Avg train loss=0.343581
+2024-11-08 22:59:00,257 - root - INFO -   Avg val loss=0.3488852083683014
+2024-11-08 22:59:00,257 - root - INFO -   Total validation time: 1.2782225608825684 sec
+2024-11-08 22:59:03,545 - root - INFO - DONE ---- rank 0
 ```
 
 In additional to optimizer fusion, for more general fusion of operations in PyTorch, we can enable
@@ -446,29 +463,30 @@ sbatch -n 1 -t 20 ./submit_pm.sh --config=short --num_data_workers 8 --data_load
 
 This is the performance of the training script for the first four epochs on a 40GB A100 card with batch size 16, DALI, AMP, fused optimizer and JIT:
 ```
-2023-09-26 23:13:06,278 - root - INFO - Time taken for epoch 1 is 43.2601523399353 sec, avg 11.465516720848926 samples/sec
-2023-09-26 23:13:06,279 - root - INFO -   Avg train loss=0.586837
-2023-09-26 23:13:16,808 - root - INFO -   Avg val loss=0.429435
-2023-09-26 23:13:16,808 - root - INFO -   Total validation time: 9.924283266067505 sec
-2023-09-26 23:13:28,794 - root - INFO - Time taken for epoch 2 is 11.979468584060669 sec, avg 42.73979237119447 samples/sec
-2023-09-26 23:13:28,794 - root - INFO -   Avg train loss=0.397797
-2023-09-26 23:13:30,768 - root - INFO -   Avg val loss=0.381870
-2023-09-26 23:13:30,768 - root - INFO -   Total validation time: 1.462252140045166 sec
-2023-09-26 23:13:42,724 - root - INFO - Time taken for epoch 3 is 11.948866605758667 sec, avg 42.849252309273034 samples/sec
-2023-09-26 23:13:42,724 - root - INFO -   Avg train loss=0.362702
-2023-09-26 23:13:44,678 - root - INFO -   Avg val loss=0.357342
-2023-09-26 23:13:44,679 - root - INFO -   Total validation time: 1.4342505931854248 sec
-2023-09-26 23:13:56,639 - root - INFO - Time taken for epoch 4 is 11.952066659927368 sec, avg 42.83777982234843 samples/sec
-2023-09-26 23:13:56,640 - root - INFO -   Avg train loss=0.347776
-2023-09-26 23:13:58,597 - root - INFO -   Avg val loss=0.351206
-2023-09-26 23:13:58,597 - root - INFO -   Total validation time: 1.4387221336364746 sec
+2024-11-08 22:59:47,489 - root - INFO - Time taken for epoch 1 is 57.044055 sec, avg 8.695034 samples/sec
+2024-11-08 22:59:47,490 - root - INFO -   Avg train loss=0.589828
+2024-11-08 23:00:03,733 - root - INFO -   Avg val loss=0.4306739866733551
+2024-11-08 23:00:03,733 - root - INFO -   Total validation time: 15.653935670852661 sec
+2024-11-08 23:00:13,555 - root - INFO - Time taken for epoch 2 is 9.815410 sec, avg 52.162874 samples/sec
+2024-11-08 23:00:13,556 - root - INFO -   Avg train loss=0.397297
+2024-11-08 23:00:15,268 - root - INFO -   Avg val loss=0.3800353705883026
+2024-11-08 23:00:15,269 - root - INFO -   Total validation time: 1.2169783115386963 sec
+2024-11-08 23:00:24,935 - root - INFO - Time taken for epoch 3 is 9.656644 sec, avg 53.020490 samples/sec
+2024-11-08 23:00:24,936 - root - INFO -   Avg train loss=0.360720
+2024-11-08 23:00:26,935 - root - INFO -   Avg val loss=0.356668084859848
+2024-11-08 23:00:26,936 - root - INFO -   Total validation time: 1.5062217712402344 sec
+2024-11-08 23:00:36,256 - root - INFO - Time taken for epoch 4 is 9.311797 sec, avg 54.984018 samples/sec
+2024-11-08 23:00:36,257 - root - INFO -   Avg train loss=0.347498
+2024-11-08 23:00:37,927 - root - INFO -   Avg val loss=0.3525484800338745
+2024-11-08 23:00:37,928 - root - INFO -   Total validation time: 1.1801795959472656 sec
+2024-11-08 23:00:40,127 - root - INFO - DONE ---- rank 0
 ```
 
 Running a profile ([`dali_amp_bf16_fused_jit.nsys-rep`](sample_nsys_profiles/dali_amp_bf16_fused_jit.nsys-rep)) using these new options and loading in Nsight Systems looks like this:
-![NSYS DALI AMP APEX JIT](tutorial_images/nsys_dali_amp_fused_jit.png)
+![NSYS DALI AMP APEX JIT](tutorial_images/nsys_dali_bf16_fused_jit.png)
 
 and zoomed in to a single iteration:
-![NSYS DALI AMP APEX JIT Zoomed](tutorial_images/nsys_dali_amp_fused_jit_zoomed.png)
+![NSYS DALI AMP APEX JIT Zoomed](tutorial_images/nsys_dali_bf16_fused_jit_zoomed.png)
 
 As the compute cost of this model is mostly dominated by large GEMMs, latency reductions via optimizer and pointwise operation fusion are less impactful, but they still provide a small performance boost in this case.
 
