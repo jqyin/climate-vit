@@ -14,7 +14,7 @@ This repository contains the example code material for the SC24 tutorial:
 
 ## Links
 
-Tutorial slides: https://drive.google.com/drive/u/2/folders/1IfHYBBduBOobWEHzeuzoL8zGSKyTGKj9
+Tutorial slides: https://drive.google.com/drive/folders/1IfHYBBduBOobWEHzeuzoL8zGSKyTGKj9?usp=sharing
 
 Join the Slack workspace: https://join.slack.com/t/nersc-dl-tutorial/shared_invite/zt-2t4ju1dd3-aS6jZ8fJKeJ0PFLsJsomcg
 
@@ -579,97 +579,151 @@ Here is a screenshot of tensorboard showing the RMSE vs relative time for the su
 ![data_parallel_timings](tutorial_images/dp_timings.png)
 
 ## Model parallelism
-Now that we are familiar with distributed data parallel training, we are ready to move to more advanced parallelism in the form of model parallelism. One of the main motivations to explore this dimension is the need to use a larger model and/or process higher resolution images: both these can lead to higher accuracies and/or better emulation of physical phenomena. However, they will inflate the memory consumption (activation and weights) as well as computational cost.  At some point, the model (activation and weights) will no longer fit on a single GPU and we need to partition/shard the model across multiple GPUs. 
-We will increase our model size to motivate this partition and show you the building blocks of implementing model parallelism, motivated by the megatron-style model parallelism. We will focus on tensor parallelism here. Our goal is not to build the most efficient model parallel network (which can require significantly more care and development and would parallelize on other dimensions as well) but rather to serve as an instructive blueprint on how to get started on parallelizing your own model in PyTorch. For all the bells and whistles, see [Megatron-LM](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) for deep details.
+
+Now that we are familiar with distributed data parallel training, we are ready to move to more advanced parallelism in the form of model parallelism. One of the main motivations to explore this dimension is the need to use a larger model and/or process higher resolution images: both these can lead to higher accuracies and/or better emulation of physical phenomena. However, they will inflate the memory consumption (activation and weights) as well as computational cost.  At some point, the model (activation and weights) will no longer fit on a single GPU and we need to partition/shard the model across multiple GPUs.
+
+We will increase our model size to motivate this partition and show you the building blocks of implementing model parallelism, motivated by the Megatron-style model parallelism. We will focus mostly on tensor parallelism here, although our implementation also includes [context parallelism](https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/context_parallel.html). Our goal is not to build the most efficient model parallel network (which can require significantly more care and development and would parallelize on other dimensions as well) but rather to serve as an instructive blueprint on how to get started on parallelizing your own model in PyTorch. For all the bells and whistles, see [Megatron-LM](https://github.com/NVIDIA/Megatron-LM/tree/main/megatron/core) for deep details.
+
 
 ### Setting up the communicator groups
-We assume a `MxD` grid of GPUs where we use data parallelism (as before) across D GPUs and split the model across `M` GPUs. Take a look at [`utils/comm.py`](utils/comm.py) where this is setup. The logic is more general where we could split the `M` GPUs into more orthogonal groups (example: `M = M_1 x M_2`) for parallelism on more dimensions. This is not done in this tutorial but we have left the logic in, so that the code can be extended for more levels of parallelism. 
 
-A quick example: Let's say we have 8 GPUs in total and we want to do 4-way model parallelism and 2-way data parallelism. The logic would simply have the model parallel group (each has 4 GPUs) ranks as `[0, 1, 2, 3], [4, 5, 6, 7]` and data parallel in the orthogonal dimension (each has 2 GPUs) as: `[0, 4], [1, 5], [2, 6], [3, 7]`. So, let's say, we are looking at the work rank `5` is doing -- then, all model parallel communications will happen within the group `[4, 5, 6, 7]` and data parallel gradient reduction in `[1, 5]`.  For this communication, we tell`torch.distributed` about the groups by creating them with `torch.distributed.new_group(ranks = grp)` and for any communication collectives such as `torch.distributed.all_reduce`, we simply pass the group to the [function call](https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce). 
+We typically assume a `MxD` grid of GPUs where we use data parallelism (as before) across D GPUs and split the model across `M` GPUs. Take a look at [`utils/comm.py`](utils/comm.py) where this is setup. The logic is more general where we could split the `M` GPUs into more orthogonal groups (example: `M = M_1 x M_2`) for parallelism on more dimensions.
 
-Another thing to note is that we need to only use the data parallel groups for the data loading purposes -- this means that the data for each model parallel group (e.g. `[4, 5, 6, 7]`) should be the same. This is taken care of in [`train_mp.py`](train_mp.py) with the lines:
+We will use the same naming convention as Megatron with `dp` referring to data parallelism, `tp` referring to tensor parallelism, `cp` referring to context parallelism (or spatial parallelism in our case) and `pp` for pipeline parallelism. We will implement `dp`, `tp`, and `cp` in our tutorial. These are more relevant to science use-cases with high resolution inputs (and hence more activation memory pressure). Hence, our grid of GPUs is: `total gpus = dp x cp x tp` (setting `pp = 1`). Together, `tp` and `cp` make up our model parallel group (M GPUs, with `M = tp x cp`) and data parallel group is orthogonal to this (D GPUS with `D = dp`)
+
+ 
+Here's a quick example: Let's say we have 8 GPUs in total and we want to do 4-way tensor parallelism `tp` and 2-way data parallelism `dp`. The logic would simply have the `tp` group (each has 4 GPUs) ranks as `[0, 1, 2, 3], [4, 5, 6, 7]` and `dp` in the orthogonal dimension (each has 2 GPUs) as: `[0, 4], [1, 5], [2, 6], [3, 7]`. So, let's say, we are looking at what work rank `5` is doing -- then, all `tp` communications will happen within the group `[4, 5, 6, 7]` and `dp` gradient reduction across `[1, 5]`.  For this communication, we tell`torch.distributed` about the groups by creating them with `torch.distributed.new_group(ranks = grp)` and for any communication collectives such as `torch.distributed.all_reduce`, we simply pass the group to the [function call (https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce).
+
+Take a look at ['utils/check_rank_generator.ipynb'](utils/check_rank_generator.ipynb) to play around with this communicator group generator. Try assigning different amount of GPUs to each parallelization group. The `order` parameter controls the order of assignment of ranks . Example: order `tp-cp-dp` would keep the `tp` GPUs closest, followed by `cp` and then `dp`. Closer GPUs will be on the same node (usually) and can take advantage of fast bandwidth like NVLink. 
+
+Another thing to note is that we need to only use the `dp` groups for the data loading purposes -- this means that the data for each model parallel group (e.g. `[4, 5, 6, 7]`) should be the same. This is taken care of in [`train_mp.py`](train_mp.py) with the lines:
+
 ```
-params.data_num_shards = comm.get_size("data")
-params.data_shard_id = comm.get_rank("data")
+params.data_num_shards = comm.get_size("dp")
+params.data_shard_id = comm.get_rank("dp")
 ```
-`get_rank()` and `get_size()` are only within the data parallel group.
+`get_rank()` and `get_size()` are only within the data parallel group.  
 
 ### Setting up the model parallel utilities
-Now that we have our groups setup, we just have to tell PyTorch to additionally communicate local results within the groups. All tensor parallel distributed utilities are at [`distributed/`](distributed/). Start off with seeing how the distributed matrix multiply is implemented here [`distributed/layers.py`]. Note that there is a call to `reduce_from_parallel_region()` which does an `all_reduce` of the partial sums. Note that you will need to implement both the forward and backward functions for this new operation that will be used to evaluate and compute the gradient seamlessly. We can do this easily in PyTorch by adding our custom `autograd.Function` class in PyTorch.  This is implemented in [`distributed/mappings.py`](distributed/mappings.py). See the [PyTorch docs](https://pytorch.org/docs/stable/notes/extending.html#how-to-use) for the steps to do this. Check out the `copy_to_parallel_region()` function as well and see the forward and backward operations for them and how they align with what we saw in the slides. Note that we have also implemented other routines that are not used (such as gathers and scatters) but will be if you partition/shard on other dimensions. We leave it in so the code can be extended.
+
+Now that we have our groups setup, we just have to tell PyTorch to additionally communicate local results within the groups. All tensor parallel distributed utilities are at [`distributed/`](distributed/). Start off with seeing how the distributed matrix multiply is implemented here [`distributed/layers.py`]. Note that there is a call to `reduce_from_parallel_region()` which does an `all_reduce` of the partial sums. Note that you will need to implement both the forward and backward functions for this new operation that will be used to evaluate and compute the gradient seamlessly. We can do this easily in PyTorch by adding our custom `autograd.Function` class in PyTorch.  This is implemented in [`distributed/mappings.py`](distributed/mappings.py). See the [PyTorch docs](https://pytorch.org/docs/stable/notes/extending.html#how-to-use) for the steps to do this. Check out the `copy_to_parallel_region()` function as well and see the forward and backward operations for them and how they align with what we saw in the slides. Note that we have also implemented other routines (such as gathers and scatters) that are not used for tensor parallel but are used for context parallelism (where we shard the sequence/context dimension across another orthogonal group of GPUs using the `cp` group).
 
 ### Running the model parallel code
-The train script is at [`train_mp.py`](train_mp.py). The model parallel size is defined by `row_parallel_size`. Setting this to `4`, for example, will enable 4-way model parallelism. Let's run a larger model by increasing our `embed_dim` to `1024` .  The config for this is called `mp` which trains the larger model assuming a global batch size of `64` with 4 GPUs for data parallelism (hence local batch size is `16`) . Let's use no model parallelism: so set `row_parallel_size=1` and run it on 4 GPUs with the following command:
+
+The train script is at [`train_mp.py`](train_mp.py). The model parallel size is defined by `tp` and `cp`. Let's first focus on just tensor parallelism `tp`. Setting the parameter `tensor_parallel` to `4`, for example, will enable 4-way tensor/model parallelism. Let's run a larger model by increasing our `embed_dim` to `1024` .  The config for this is called `mp` which trains the larger model assuming a global batch size of `64` with 4 GPUs for data parallelism (hence local batch size is `16`) . Let's use no model parallelism: so set `tensor_parallel=1` and run it on 4 GPUs with the following command:
+
 ```
-sbatch --nodes 1 submit_pm_mp.sh --config=mp --row_parallel_size=1
-```
- We can see from the logs that the job crashes with an OOM signal because the model is too big. 
-```
-File "/usr/local/lib/python3.10/dist-packages/torch/_tensor.py", line 491, in backward
-torch.autograd.backward(
-File "/usr/local/lib/python3.10/dist-packages/torch/autograd/__init__.py", line 204, in backward
-Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 318.00 MiB. GPU 1 has a total capacty of 39.39 GiB of which 130.56 MiB is free. Including non-PyTorch memory, this process has 39.25 GiB memory in use. Of the allocated memory 31.34 GiB is allocated by PyTorch, and 1.40 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
-```
-If we run it on an 80G GPU, we can see the estimated memory usage to be around 41GB and hence just overflows the 40G GPU. While this example is instructive, larger models (and/or larger inputs) can push the memory consumption significantly higher. 
-```
-Scaffolding memory high watermark: 10.2071533203125 GB.
-2023-11-03 04:14:58,115 - root - INFO - Starting Training Loop...
-2023-11-03 04:15:08,450 - torch.nn.parallel.distributed - INFO - Reducer buckets have been rebuilt in this iteration.
-2023-11-03 04:15:08,450 - torch.nn.parallel.distributed - INFO - Reducer buckets have been rebuilt in this iteration.
-2023-11-03 04:15:08,451 - torch.nn.parallel.distributed - INFO - Reducer buckets have been rebuilt in this iteration.
-2023-11-03 04:15:08,452 - torch.nn.parallel.distributed - INFO - Reducer buckets have been rebuilt in this iteration.
-2023-11-03 04:15:08,580 - root - INFO -  Memory usage after forward pass: 40.0841064453125 GB.
-2023-11-03 04:28:15,944 - root - INFO - Time taken for epoch 1 is 791.9564564228058 sec, avg 47.8410141021346 samples/sec
-2023-11-03 04:28:15,945 - root - INFO - Avg train loss=0.336905
-2023-11-03 04:28:35,199 - root - INFO - Avg val loss=0.265976
-2023-11-03 04:28:35,199 - root - INFO - Total validation time: 18.541259050369263 sec
-2023-11-03 04:28:36,641 - root - INFO -  Memory usage after forward pass: 41.20123291015625 GB.
-2023-11-03 04:41:45,640 - root - INFO - Time taken for epoch 2 is 790.3432559967041 sec, avg 48.0196417341964 samples/sec
-2023-11-03 04:41:45,642 - root - INFO - Avg train loss=0.224150
-2023-11-03 04:42:03,306 - root - INFO - Avg val loss=0.197870
-2023-11-03 04:42:03,307 - root - INFO - Total validation time: 17.101737022399902 sec
-2023-11-03 04:42:04,724 - root - INFO -  Memory usage after forward pass: 41.20123291015625 GB.
-2023-11-03 04:55:13,705 - root - INFO - Time taken for epoch 3 is 790.3928642272949 sec, avg 48.01662782862127 samples/sec
-2023-11-03 04:55:13,706 - root - INFO - Avg train loss=0.179888
-2023-11-03 04:55:29,698 - root - INFO - Avg val loss=0.169655
-2023-11-03 04:55:29,698 - root - INFO - Total validation time: 15.423459529876709 sec
-2023-11-03 04:55:31,077 - root - INFO -  Memory usage after forward pass: 41.20123291015625 GB.
+sbatch --nodes 1 submit_pm_mp.sh --config=mp --tensor_parallel=1
 ```
 
-Let's run it with `row_parallel_size=4`, which will partition/shard the hidden dimensions of the MLP weights and biases as well as the attention heads. Note here that 4 GPUs are used for model parallelism. Recall our global batch size is `64`. How many GPUs do we need? We also want 4-way data parallel, in addition to model parallelism, here: therefore, we should run on 16 GPUs (or 4 nodes on Perlmutter). Remember that we are assuming `M x D` GPUs always. Run this config with the command:
+We can see from the logs that the job crashes with an OOM signal because the model is too big.
+
 ```
-sbatch --nodes 4 submit_pm_mp.sh --config=mp --row_parallel_size=4
-```
-```
-Scaffolding memory high watermark: 8.9056396484375 GB.
-2023-11-04 04:55:27,609 - root - INFO - Starting Training Loop...
-2023-11-04 04:55:38,372 - root - INFO -  Memory usage after forward pass: 28.6165771484375 GB.
-2023-11-04 05:01:08,265 - root - INFO - Time taken for epoch 1 is 334.90422677993774 sec, avg 113.13085046518637 samples/sec
-2023-11-04 05:01:08,266 - root - INFO - Avg train loss=0.332298
-2023-11-04 05:01:21,165 - root - INFO - Avg val loss=0.246270
-2023-11-04 05:01:21,166 - root - INFO - Total validation time: 12.243930101394653 sec
-2023-11-04 05:01:21,829 - root - INFO -  Memory usage after forward pass: 32.7415771484375 GB.
-2023-11-04 05:06:52,733 - root - INFO - Time taken for epoch 2 is 331.56011605262756 sec, avg 114.46491348789367 samples/sec
-2023-11-04 05:06:52,734 - root - INFO - Avg train loss=0.205112
-2023-11-04 05:07:03,417 - root - INFO - Avg val loss=0.178545
-2023-11-04 05:07:03,417 - root - INFO - Total validation time: 10.102246046066284 sec
-2023-11-04 05:07:04,120 - root - INFO -  Memory usage after forward pass: 32.7415771484375 GB.
-2023-11-04 05:12:35,057 - root - INFO - Time taken for epoch 3 is 331.6335074901581 sec, avg 114.43958207729146 samples/sec
-2023-11-04 05:12:35,058 - root - INFO - Avg train loss=0.160458
-2023-11-04 05:12:46,143 - root - INFO - Avg val loss=0.148919
-2023-11-04 05:12:46,144 - root - INFO - Total validation time: 10.509092807769775 sec
-2023-11-04 05:12:46,776 - root - INFO -  Memory usage after forward pass: 32.7415771484375 GB.
+[rank2]: return F.layer_norm(
+[rank2]: File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2575, in layer_norm
+[rank2]: return torch.layer_norm(input, normalized_shape, weight, bias, eps, torch.backends.cudnn.enabled)
+[rank2]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 254.00 MiB. GPU 2 has a total capacity of 39.39 GiB of which 217.06 MiB is free. Including non-PyTorch memory, this process has 39.16 GiB memory in use. Of the allocated memory 31.28 GiB is allocated by PyTorch, and 155.23 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
 ```
 
-We see that the memory has reduced to 32.7G. Also note that the throughput is higher.
+If we run it on an 80G GPU, we can see the estimated memory usage to be around 45GB and hence just overflows the 40G GPU. While this example is instructive, larger models (and/or larger inputs) can push the memory consumption significantly higher.
 
-*Question: Can we drop the memory consumed more? What tensors have we left un-partitioned?*
+```
+2024-11-12 03:19:21,713 - root - INFO - Scaffolding memory high watermark: 10.4781494140625 GB.
+2024-11-12 03:19:21,713 - root - INFO - Starting Training Loop...
+2024-11-12 03:19:33,484 - root - INFO -  Memory usage after forward pass: 43.8121337890625 GB.
+2024-11-12 03:26:17,970 - root - INFO - Time taken for epoch 1 is 408.470099 sec, avg 92.755871 samples/sec
+2024-11-12 03:26:17,971 - root - INFO - Avg train loss=0.337123
+2024-11-12 03:26:30,450 - root - INFO - Avg val loss=0.2503761947154999
+2024-11-12 03:26:30,450 - root - INFO - Total validation time: 11.740140676498413 sec
+2024-11-12 03:26:31,303 - root - INFO -  Memory usage after forward pass: 44.9293212890625 GB.
+2024-11-12 03:33:17,521 - root - INFO - Time taken for epoch 2 is 406.931129 sec, avg 93.263939 samples/sec
+2024-11-12 03:33:17,522 - root - INFO - Avg train loss=0.205674
+2024-11-12 03:33:29,642 - root - INFO - Avg val loss=0.17378553748130798
+2024-11-12 03:33:29,643 - root - INFO - Total validation time: 11.538096904754639 sec
+2024-11-12 03:33:30,357 - root - INFO -  Memory usage after forward pass: 44.92926025390625 GB.
+2024-11-12 03:40:17,059 - root - INFO - Time taken for epoch 3 is 407.408527 sec, avg 93.154653 samples/sec
+2024-11-12 03:40:17,061 - root - INFO - Avg train loss=0.159756
+2024-11-12 03:40:28,331 - root - INFO - Avg val loss=0.14955200254917145
+2024-11-12 03:40:28,331 - root - INFO - Total validation time: 10.673660039901733 sec
+2024-11-12 03:40:29,132 - root - INFO -  Memory usage after forward pass: 44.92926025390625 GB.
+2024-11-12 03:47:16,095 - root - INFO - Time taken for epoch 4 is 407.678463 sec, avg 93.092973 samples/sec
+2024-11-12 03:47:16,098 - root - INFO - Avg train loss=0.142359
+2024-11-12 03:47:27,502 - root - INFO - Avg val loss=0.13798236846923828
+2024-11-12 03:47:27,503 - root - INFO - Total validation time: 10.814826250076294 sec
+```
+
+
+Let's run it with `tensor_parallel=4`, which will partition/shard the hidden dimensions of the MLP weights and biases as well as the attention heads.
+
+Note here that 4 GPUs are used for model parallelism. Recall our global batch size is `64`. How many GPUs do we need? We also want 4-way data parallel, in addition to model parallelism, here: therefore, we should run on 16 GPUs (or 4 nodes on Perlmutter). Remember that we are assuming `tp x dp` GPUs always. Run this config with the command:
+
+```
+sbatch --nodes 4 submit_pm_mp.sh --config=mp --tensor_parallel=4
+```
+
+```
+2024-11-08 12:51:44,863 - root - INFO - Scaffolding memory high watermark: 10.18255615234375 GB.
+2024-11-08 12:51:44,863 - root - INFO - Starting Training Loop...
+2024-11-08 12:51:55,190 - root - INFO -  Memory usage after forward pass: 31.68060302734375 GB.
+2024-11-08 12:56:57,607 - root - INFO - Time taken for epoch 1 is 306.602160 sec, avg 123.573820 samples/sec
+2024-11-08 12:56:57,615 - root - INFO - Avg train loss=0.330712
+2024-11-08 12:57:08,415 - root - INFO - Avg val loss=0.243482768535614
+2024-11-08 12:57:08,415 - root - INFO - Total validation time: 9.684647560119629 sec
+2024-11-08 12:57:09,020 - root - INFO -  Memory usage after forward pass: 33.2371826171875 GB.
+2024-11-08 13:02:12,319 - root - INFO - Time taken for epoch 2 is 303.860505 sec, avg 124.899417 samples/sec
+2024-11-08 13:02:12,321 - root - INFO - Avg train loss=0.202910
+2024-11-08 13:02:21,699 - root - INFO - Avg val loss=0.17602449655532837
+2024-11-08 13:02:21,700 - root - INFO - Total validation time: 8.193148374557495 sec
+2024-11-08 13:02:22,273 - root - INFO -  Memory usage after forward pass: 33.2371826171875 GB.
+2024-11-08 13:07:25,039 - root - INFO - Time taken for epoch 3 is 303.334088 sec, avg 125.116172 samples/sec
+2024-11-08 13:07:25,040 - root - INFO - Avg train loss=0.160378
+2024-11-08 13:07:33,786 - root - INFO - Avg val loss=0.1508728265762329
+2024-11-08 13:07:33,786 - root - INFO - Total validation time: 7.953559875488281 sec
+2024-11-08 13:07:34,361 - root - INFO -  Memory usage after forward pass: 33.2371826171875 GB.
+2024-11-08 13:12:37,045 - root - INFO - Time taken for epoch 4 is 303.251674 sec, avg 125.150175 samples/sec
+2024-11-08 13:12:37,045 - root - INFO - Avg train loss=0.142304
+2024-11-08 13:12:46,440 - root - INFO - Avg val loss=0.13786984980106354
+2024-11-08 13:12:46,440 - root - INFO - Total validation time: 7.972141742706299 sec
+```
+
+  
+
+We see that the memory has reduced to 33.2G. Also note that the throughput is higher.
+
+  
 
 We also see that the bigger model gets a better RMSE compared to the batch size `64` run from before (with the smaller model):
+
 ![model parallel logs](tutorial_images/mp_comp.png)
 
 You can try out similar data parallel scaling configs for this model as well. Here's an example screenshot for three different global batch sizes:
+
 ![model and data parallel](tutorial_images/mp_dp_comp.png)
+
+  
+*Question: Can we drop the memory consumed more? What tensors have we left un-partitioned?*
+
+
+#### More advanced material with context parallelism (optional)
+For high resolution images (common in many scientific problems), it might be more beneficial to shard the sequence (spatial) dimension. We can do this using context parallelism. See the [Megatron-core explanation](https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/context_parallel.html) for the communication collectives we need for `cp`. Now we will use `tp x cp x dp` GPUs. For `cp`, the sequence sharding will require additional `allgather` and `reduce-scatter` operations, which we have implemented. Try running:
+
+```
+sbatch --nodes 4 submit_pm_mp.sh --config=mp --tensor_parallel=1 --context_parallel=4 --order=cp-tp-dp
+```
+
+Now, we are using just context parallelism (so all model parallel GPUs are used to shard the sequence). Be careful, since this means that the weights are *shared* across the `cp` GPUs.
+
+*Question: If weights are shared across any model parallel GPUs, what considerations should we keep in mind?*
+  
+ For shared weights, be careful that the weights are properly initialized and if they need additional reductions, then they are implemented through DDP comm hooks.  
+To keep track of shared weights, we annotate them (see [this example](https://github.com/NERSC/sc24-dl-tutorial/blob/main/distributed/layers.py#L65-L66)) with:
+
+```
+self.weight.is_shared_mp = ['cp'] 
+self.weight.mark_for_reduction = ['cp'] 
+```
+Shared weights need to have the same initialization (see [our implementation here](https://github.com/NERSC/sc24-dl-tutorial/blob/main/distributed/helpers.py#L5-L30)). If the input activation grads are sharded, then the weight gradients for the shared weights need an additional AllReduce. Check out the [comm_hooks](https://github.com/NERSC/sc24-dl-tutorial/blob/ss/readme_changes/distributed/mappings.py#L170-L243), we have implemented to do an additional AllReduce of the weight gradients across the `cp` group. 
+
 
 ### Using CUDA Graphs (optional)
 In this repository, we have included an alternative training script [train_mp_graphs.py](train_mp_graphs.py) that illustrates applying
