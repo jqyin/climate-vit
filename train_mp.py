@@ -68,12 +68,6 @@ def train(params, args, local_rank, world_rank, world_size):
         model = init_ddp_model_and_reduction_hooks(model, device_ids=[local_rank],
                                                    output_device=[local_rank],
                                                    bucket_cap_mb=args.bucket_cap_mb)
-#        ddp_group = comm.get_group("dp")
-#        model = DistributedDataParallel(model,
-#                                        device_ids=[local_rank],
-#                                        output_device=[local_rank],
-#                                        bucket_cap_mb=args.bucket_cap_mb,
-#                                        process_group=ddp_group)
 
     if params.enable_fused:
         optimizer = optim.Adam(
