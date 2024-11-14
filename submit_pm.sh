@@ -11,7 +11,7 @@
 #SBATCH -J vit-era5
 #SBATCH -o %x-%j.out
 
-DATADIR=/pscratch/sd/s/shas1693/data/sc23_tutorial_data/downsampled
+DATADIR=/pscratch/sd/s/shas1693/data/sc24_tutorial_data
 LOGDIR=${SCRATCH}/sc24-dl-tutorial/logs
 mkdir -p ${LOGDIR}
 args="${@}"
