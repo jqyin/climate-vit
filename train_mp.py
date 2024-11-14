@@ -361,7 +361,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--parallel_order",
-        default="tp-dp",
+        default="tp-cp-dp",
         type=str,
         help="Order of ranks for parallelism",
     )
