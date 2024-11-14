@@ -62,8 +62,8 @@ opt: &opt
   num_data_workers: 8
   amp_mode: fp16
   num_iters: 30000
-  enable_fused: True
-  enable_apex: True
+  enable_jit: true
+  enable_fused: true
 
 # ----- Data parallel scaling configs
 bs16_opt:
