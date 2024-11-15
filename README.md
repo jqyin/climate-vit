@@ -612,13 +612,13 @@ Now that we have our groups setup, we just have to tell PyTorch to additionally 
 
 ### Running the model parallel code
 
-The train script is at [`train_mp.py`](train_mp.py). The model parallel size is defined by `tp` and `cp`. Let's first focus on just tensor parallelism `tp`. Setting the parameter `tensor_parallel` to `4`, for example, will enable 4-way tensor/model parallelism. Let's run a larger model by increasing our `embed_dim` to `1024` .  The config for this is called `mp` which trains the larger model assuming a global batch size of `64` with 4 GPUs for data parallelism (hence local batch size is `16`) . Let's use no model parallelism: so set `tensor_parallel=1` and run it on 4 GPUs with the following command:
+The train script for model-parallel training is at [`train_mp.py`](train_mp.py). The model parallel size is defined by `tp` and `cp`. Let's first focus on just tensor parallelism `tp`. Setting the parameter `tensor_parallel` to `4`, for example, will enable 4-way tensor/model parallelism. Let's run a larger model by increasing our `embed_dim` to `1024`. The config for this is called `mp` which trains the larger model assuming a global batch size of `64` with 4 GPUs for data parallelism (hence local batch size is `16`). Let's initially try running this larger model with _no_ model parallelism by setting `tensor_parallel=1` and running it on 4 GPUs with the following command:
 
 ```
 sbatch --nodes 1 submit_pm_mp.sh --config=mp --tensor_parallel=1
 ```
 
-We can see from the logs that the job crashes with an OOM signal because the model is too big.
+If this job runs on 40G GPUs on Perlmutter, we can see from the logs that the job crashes with an OOM signal because the model is too big:
 
 ```
 [rank2]: return F.layer_norm(
@@ -653,7 +653,6 @@ If we run it on an 80G GPU, we can see the estimated memory usage to be around 4
 2024-11-12 03:47:27,502 - root - INFO - Avg val loss=0.13798236846923828
 2024-11-12 03:47:27,503 - root - INFO - Total validation time: 10.814826250076294 sec
 ```
-
 
 Let's run it with `tensor_parallel=4`, which will partition/shard the hidden dimensions of the MLP weights and biases as well as the attention heads.
 
