@@ -26,7 +26,7 @@ from utils.metrics import weighted_rmse
 from networks import vit
 
 from distributed.mappings import init_ddp_model_and_reduction_hooks
-from distributed.helpers import sync_params
+from distributed.helpers import init_params_for_shared_weights
 
 from utils.plots import generate_images
 
@@ -108,8 +108,8 @@ def train(params, args, local_rank, world_rank, world_size):
         scaler = None
 
     # weight initialization needs to be synced across shared weights
-    if comm.get_size("model") > 1:
-        sync_params(model)
+    if comm.get_size("tp-cp") > 1:
+        init_params_for_shared_weights(model)
 
     capture_stream = torch.cuda.Stream()
     if params.distributed:
@@ -165,9 +165,9 @@ def train(params, args, local_rank, world_rank, world_size):
         val_loss = loss_func(gen, tar)
         val_rmse = weighted_rmse(gen, tar)
         if params.distributed:
-            torch.distributed.all_reduce(tr_loss, op=ReduceOp.AVG, group=comm.get_group("data"))
-            torch.distributed.all_reduce(val_loss, op=ReduceOp.AVG, group=comm.get_group("data"))
-            torch.distributed.all_reduce(val_rmse, op=ReduceOp.AVG, group=comm.get_group("data"))
+            torch.distributed.all_reduce(tr_loss, op=ReduceOp.AVG, group=comm.get_group("dp"))
+            torch.distributed.all_reduce(val_loss, op=ReduceOp.AVG, group=comm.get_group("dp"))
+            torch.distributed.all_reduce(val_rmse, op=ReduceOp.AVG, group=comm.get_group("dp"))
         if world_rank==0:
             args.tboard_writer.add_scalar('Loss/train', tr_loss.item(), 0)
             args.tboard_writer.add_scalar('Loss/valid', val_loss.item(), 0)
@@ -227,7 +227,7 @@ def train(params, args, local_rank, world_rank, world_size):
 
 
             if params.distributed:
-                torch.distributed.all_reduce(static_loss, op=ReduceOp.AVG, group=comm.get_group("data"))
+                torch.distributed.all_reduce(static_loss, op=ReduceOp.AVG, group=comm.get_group("dp"))
             tr_loss.append(static_loss.item())
 
             torch.cuda.nvtx.range_pop() # step
@@ -272,8 +272,8 @@ def train(params, args, local_rank, world_rank, world_size):
                     valid_steps += 1
 
                 if params.distributed:
-                    torch.distributed.all_reduce(val_loss, op=ReduceOp.AVG, group=comm.get_group("data"))
-                    torch.distributed.all_reduce(val_rmse, op=ReduceOp.AVG, group=comm.get_group("data"))
+                    torch.distributed.all_reduce(val_loss, op=ReduceOp.AVG, group=comm.get_group("dp"))
+                    torch.distributed.all_reduce(val_rmse, op=ReduceOp.AVG, group=comm.get_group("dp"))
 
         val_rmse /= valid_steps # Avg validation rmse
         val_loss /= valid_steps
@@ -293,25 +293,90 @@ def train(params, args, local_rank, world_rank, world_size):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run_num", default='00', type=str, help='tag for indexing the current experiment')
-    parser.add_argument("--yaml_config", default='./config/ViT.yaml', type=str, help='path to yaml file containing training configs')
-    parser.add_argument("--config", default='base', type=str, help='name of desired config in yaml file')
-    parser.add_argument("--amp_mode", default='none', type=str, choices=['none', 'fp16', 'bf16'], help='select automatic mixed precision mode')  
-    parser.add_argument("--enable_fused", action='store_true', help='enable fused Adam optimizer')
-    parser.add_argument("--enable_jit", action='store_true', help='enable JIT compilation')
-    parser.add_argument("--local_batch_size", default=None, type=int, help='local batchsize (manually override global_batch_size config setting)')
-    parser.add_argument("--num_iters", default=None, type=int, help='number of iters to run')
-    parser.add_argument("--num_data_workers", default=None, type=int, help='number of data workers for data loader')
-    parser.add_argument("--data_loader_config", default=None, type=str, choices=['pytorch', 'dali'], help="dataloader configuration. choices: 'pytorch', 'dali'")
-    parser.add_argument("--bucket_cap_mb", default=25, type=int, help='max message bucket size in mb')
-    parser.add_argument("--disable_broadcast_buffers", action='store_true', help='disable syncing broadcasting buffers')
-    parser.add_argument("--noddp", action='store_true', help='disable DDP communication')
+    parser.add_argument(
+        "--run_num",
+        default="00",
+        type=str,
+        help="tag for indexing the current experiment",
+    )
+    parser.add_argument(
+        "--yaml_config",
+        default="./config/ViT.yaml",
+        type=str,
+        help="path to yaml file containing training configs",
+    )
+    parser.add_argument(
+        "--config", default="base", type=str, help="name of desired config in yaml file"
+    )
+    parser.add_argument(
+        "--amp_mode",
+        default="none",
+        type=str,
+        choices=["none", "fp16", "bf16"],
+        help="select automatic mixed precision mode",
+    )
+    parser.add_argument(
+        "--enable_fused", action="store_true", help="enable fused Adam optimizer"
+    )
+    parser.add_argument(
+        "--enable_jit", action="store_true", help="enable JIT compilation"
+    )
+    parser.add_argument(
+        "--local_batch_size",
+        default=None,
+        type=int,
+        help="local batchsize (manually override global_batch_size config setting)",
+    )
+    parser.add_argument(
+        "--num_iters", default=None, type=int, help="number of iters to run"
+    )
+    parser.add_argument(
+        "--num_data_workers",
+        default=None,
+        type=int,
+        help="number of data workers for data loader",
+    )
+    parser.add_argument(
+        "--data_loader_config",
+        default=None,
+        type=str,
+        choices=["pytorch", "dali"],
+        help="dataloader configuration. choices: 'pytorch', 'dali'",
+    )
+    parser.add_argument(
+        "--bucket_cap_mb", default=25, type=int, help="max message bucket size in mb"
+    )
+    parser.add_argument(
+        "--disable_broadcast_buffers",
+        action="store_true",
+        help="disable syncing broadcasting buffers",
+    )
+    parser.add_argument(
+        "--noddp", action="store_true", help="disable DDP communication"
+    )
 
     # model parallelism arguments
-    parser.add_argument("--row_parallel_size", default=1, type=int, help="Number of row comms")
-    parser.add_argument("--col_parallel_size", default=1, type=int, help="Number of col comms")
+    parser.add_argument(
+        "--tensor_parallel",
+        default=1,
+        type=int,
+        help="Number of GPUs for tensor parallelism",
+    )
+    parser.add_argument(
+        "--context_parallel",
+        default=1,
+        type=int,
+        help="Number of GPUs for tensor parallelism",
+    )
+    parser.add_argument(
+        "--parallel_order",
+        default="tp-cp-dp",
+        type=str,
+        help="Order of ranks for parallelism",
+    )
 
     args = parser.parse_args()
+
  
     run_num = args.run_num
 
@@ -344,18 +409,9 @@ if __name__ == '__main__':
     params.distributed = False
 
     # setup model parallel sizes
-    # we do not use col parallel size for this tutorial, but leave it in 
-    # so that an interested user can begin to extend
-    assert (
-        args.col_parallel_size == 1
-    ), f"col_parallel_size is not used in this example, please set to 1."
-
-    params["model_parallel_sizes"] = [
-        args.row_parallel_size,
-        args.col_parallel_size
-    ]
-    params["model_parallel_names"] = ["row_matmul", "col_matmul"]
-
+    params["tp"] = args.tensor_parallel
+    params["cp"] = args.context_parallel
+    params["order"] = args.parallel_order
     # initialize comm
     comm.init(params, verbose=True)
 
@@ -366,24 +422,26 @@ if __name__ == '__main__':
     params.distributed = (world_size > 1)
 
     assert (
-        params["global_batch_size"] % comm.get_size("data") == 0
-    ), f"Error, cannot evenly distribute {params['global_batch_size']} across {comm.get_size('data')} GPU."
+        params["global_batch_size"] % comm.get_size("dp") == 0
+    ), f"Error, cannot evenly distribute {params['global_batch_size']} across {comm.get_size('dp')} GPU."
 
     if args.local_batch_size:
         # Manually override batch size
         params.local_batch_size = args.local_batch_size
-        params.update({"global_batch_size" : comm.get_size("data") * args.local_batch_size})
+        params.update({"global_batch_size" : comm.get_size("dp") * args.local_batch_size})
     else:
         # Compute local batch size based on number of ranks
-        params.local_batch_size = int(params["global_batch_size"] // comm.get_size("data"))
+        params.local_batch_size = int(params["global_batch_size"] // comm.get_size("dp"))
 
     # for data loader, set the actual number of data shards and id
-    params.data_num_shards = comm.get_size("data")
-    params.data_shard_id = comm.get_rank("data")
+    params.data_num_shards = comm.get_size("dp")
+    params.data_shard_id = comm.get_rank("dp")
 
     # Set up directory
     baseDir = params.expdir
-    expDir = os.path.join(baseDir, args.config + '/%dMP/'%(comm.get_size("model")) + str(run_num) + '/')
+    expDir = os.path.join(
+        baseDir, args.config + "/%dMP/" % (comm.get_size("tp-cp")) + str(run_num) + "/"
+    )
     if world_rank==0:
         if not os.path.isdir(expDir):
             os.makedirs(expDir)
