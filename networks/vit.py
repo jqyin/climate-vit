@@ -87,7 +87,7 @@ class Attention(nn.Module):
         return x
 
 class Block(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_type="megatron", attn_drop=0.,
                  drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm,
                  cp_shapes=None):
         super().__init__()
@@ -101,7 +101,7 @@ class Block(nn.Module):
             # cp: context parallel shards the sequence
             self.attn = DistributedAttention(
                 dim, 
-                num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop,
+                num_heads=num_heads, qkv_bias=qkv_bias, attn_type=attn_type, attn_drop=attn_drop, proj_drop=drop,
                 comm_tp_name='tp',
                 comm_cp_name='cp',
                 cp_shapes=cp_shapes
@@ -150,7 +150,7 @@ class PatchEmbed(nn.Module):
 
 class VisionTransformer(nn.Module):
     def __init__(self, img_size=[224, 224], patch_size=16, in_chans=3, out_chans=3, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=False, drop_rate=0., attn_drop_rate=0.,
+                 num_heads=12, mlp_ratio=4., qkv_bias=False, drop_rate=0., attn_drop_rate=0., attn_type='megatron',
                  drop_path_rate=0., norm_layer=nn.LayerNorm,
                  **kwargs):
         super().__init__()
@@ -159,6 +159,7 @@ class VisionTransformer(nn.Module):
         self.img_size = img_size
         self.out_ch = out_chans
         self.drop_rate = drop_rate
+        self.attn_type = attn_type
 
         self.patch_embed = PatchEmbed(img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=self.embed_dim)
         num_patches = self.patch_embed.num_patches
@@ -174,7 +175,7 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
+                drop=drop_rate, attn_type=attn_type,  attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
                 cp_shapes=self.cp_shapes)
             for i in range(depth)])
 
@@ -243,6 +244,7 @@ def ViT(params, **kwargs):
                    drop_path_rate=params.dropout,
                    drop_rate=params.dropout,
                    attn_drop_rate=params.dropout,
+                   attn_type = params.attn_type,
                    **kwargs)
     return model
 

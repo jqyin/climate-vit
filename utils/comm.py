@@ -155,6 +155,8 @@ def init_model_parallel_info(tp=1, pp=1, dp=1, cp=1, order="tp-dp", verbose=Fals
     for grp in groups_to_build:
         for ranks in generator_wrapper(grp):
             group = dist.new_group(ranks)
+            if world_rank == 0:
+                print(f"{grp}:{ranks}")
             if world_rank in ranks:
                 _COMM_GROUPS[grp] = group
 

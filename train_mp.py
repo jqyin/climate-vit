@@ -3,7 +3,6 @@ import os
 import time
 import numpy as np
 import argparse
-import pynvml
 
 import torch
 import torch.nn as nn
@@ -30,16 +29,81 @@ from distributed.helpers import init_params_for_shared_weights
 
 from utils.plots import generate_images
 
+def save_checkpoint(model, optimizer, scheduler, epoch, save_path):
+    """
+    Saves checkpoint for the given epoch into a sub-directory named epoch_{epoch}.
+    Also updates the 'latest' file to record the most recently saved epoch.
+    """
+    counts = torch.cuda.LongTensor([1])
+    torch.distributed.all_reduce(counts, group=comm.get_group("dp"))
+    assert counts[0].item() == torch.distributed.get_world_size(group=comm.get_group("dp"))
+
+    rank = torch.distributed.get_rank()
+
+    epoch_dir = os.path.join(save_path, f"epoch_{epoch}")
+    os.makedirs(epoch_dir, exist_ok=True)
+
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict() if optimizer else None,
+        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
+        'rng_state': torch.get_rng_state(),
+        'cuda_rng_state': torch.cuda.get_rng_state_all(),
+    }
+
+    ckpt_path = os.path.join(epoch_dir, f"rank{rank}.pt")
+    torch.save(checkpoint, ckpt_path)
+    print(f"Checkpoint for epoch {epoch} saved for rank {rank} -> {ckpt_path}")
+
+    latest_file_path = os.path.join(save_path, "latest")
+    with open(latest_file_path, "w") as f:
+        f.write(str(epoch))
+
+
+def load_checkpoint(model, optimizer, scheduler, load_path):
+    """
+    Loads the most recent checkpoint according to the epoch stored in 'latest'.
+    Assumes sub-directories are named as epoch_{epoch}, and each rank file is rank{rank}.pt.
+    """
+    rank = torch.distributed.get_rank()
+
+    latest_file_path = os.path.join(load_path, "latest")
+    if not os.path.exists(latest_file_path):
+        raise FileNotFoundError(
+            f"No 'latest' file found in {load_path}! Make sure checkpoints have been saved."
+        )
+
+    with open(latest_file_path, "r") as f:
+        latest_epoch = int(f.read().strip())
+
+    checkpoint_path = os.path.join(load_path, f"epoch_{latest_epoch}", f"rank{rank}.pt")
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint {checkpoint_path} not found!")
+
+    checkpoint = torch.load(checkpoint_path, map_location='cuda')
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    if optimizer and 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict']:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if scheduler and 'scheduler_state_dict' in checkpoint and checkpoint['scheduler_state_dict']:
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+    cpu_rng_state = checkpoint['rng_state'].to(dtype=torch.uint8, device='cpu')
+    torch.set_rng_state(cpu_rng_state)
+
+    cuda_rng_states = [s.to(dtype=torch.uint8, device='cpu') for s in checkpoint['cuda_rng_state']]
+    torch.cuda.set_rng_state_all(cuda_rng_states)
+
+    print(f"Checkpoint loaded for rank {rank} from {checkpoint_path}")
+    return checkpoint['epoch']
+
 
 def train(params, args, local_rank, world_rank, world_size):
     # set device and benchmark mode
-    torch.backends.cudnn.benchmark = True
+    #torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(local_rank)
     device = torch.device("cuda:%d" % local_rank)
-
-    # init pynvml and get handle
-    pynvml.nvmlInit()
-    nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(device.index)
 
     # get data loader
     logging.info("rank %d, begin data loader init" % world_rank)
@@ -53,6 +117,12 @@ def train(params, args, local_rank, world_rank, world_size):
 
     # create model
     model = vit.ViT(params).to(device)
+
+    num_params = sum(p.numel() for p in model.parameters())
+    num_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    if world_rank == 0:
+        logging.info(f"Total parameters: {num_params}")
+        logging.info(f"Trainable parameters: {num_trainable_params}")
 
     if params.enable_jit:
         model = torch.compile(model)
@@ -78,10 +148,6 @@ def train(params, args, local_rank, world_rank, world_size):
 
     if world_rank == 0:
         logging.info(model)
-        all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (
-            1024.0 * 1024.0 * 1024.0
-        )
-        logging.info(f"Scaffolding memory high watermark: {all_mem_gb} GB.")
 
     iters = 0
     startEpoch = 0
@@ -106,8 +172,8 @@ def train(params, args, local_rank, world_rank, world_size):
     else:
         loss_func = l2_loss
 
-    if world_rank == 0:
-        logging.info("Starting Training Loop...")
+    #if world_rank == 0:
+    logging.info("Starting Training Loop...")
 
     # Log initial loss on train and validation to tensorboard
     with torch.no_grad():
@@ -136,6 +202,18 @@ def train(params, args, local_rank, world_rank, world_size):
             )
 
     params.num_epochs = params.num_iters // len(train_data_loader)
+
+    print(f"num_epochs: {params.num_epochs}, steps_per_epoch: {len(train_data_loader)}")
+
+    last_epoch, last_step = None, None
+    try:
+        last_epoch = load_checkpoint(model, optimizer, scheduler, params['save_path'])
+        print(f"checkpoint loaded: start from epoch {last_epoch+1}")
+        startEpoch = last_epoch+1
+    except:
+        print(f"no checkpoint")
+        pass
+
     iters = 0
     t1 = time.time()
     for epoch in range(startEpoch, startEpoch + params.num_epochs):
@@ -150,7 +228,6 @@ def train(params, args, local_rank, world_rank, world_size):
 
         model.train()
         step_count = 0
-
         for i, data in enumerate(train_data_loader, 0):
             if world_rank == 0:
                 if epoch == 3 and i == 0:
@@ -158,42 +235,31 @@ def train(params, args, local_rank, world_rank, world_size):
                 if epoch == 3 and i == len(train_data_loader) - 1:
                     torch.cuda.profiler.stop()
 
-            torch.cuda.nvtx.range_push(f"step {i}")
+            print(f"rank {world_rank}: epoch {epoch} step {step_count}")
             iters += 1
             dat_start = time.time()
-            torch.cuda.nvtx.range_push(f"data copy in {i}")
 
             inp, tar = map(lambda x: x.to(device), data)
-            torch.cuda.nvtx.range_pop()  # copy in
 
             tr_start = time.time()
             b_size = inp.size(0)
 
             optimizer.zero_grad()
 
-            torch.cuda.nvtx.range_push(f"forward")
             with autocast(enabled=params.amp_enabled, dtype=params.amp_dtype):
                 gen = model(inp)
                 loss = loss_func(gen, tar)
-            torch.cuda.nvtx.range_pop()  # forward
 
-            if world_rank == 0 and i == 1:  # print the mem used
-                all_mem_gb = pynvml.nvmlDeviceGetMemoryInfo(nvml_handle).used / (
-                    1024.0 * 1024.0 * 1024.0
-                )
-                logging.info(f" Memory usage after forward pass: {all_mem_gb} GB.")
+            if world_rank == 0 and i%params['print_steps'] == 0:  # print the mem used
+                logging.info(f" Memory usage after forward pass: {torch.cuda.max_memory_allocated() / 1e9} GB.")
 
             if params.amp_dtype == torch.float16:
                 scaler.scale(loss).backward()
-                torch.cuda.nvtx.range_push(f"optimizer")
                 scaler.step(optimizer)
-                torch.cuda.nvtx.range_pop()  # optimizer
                 scaler.update()
             else:
                 loss.backward()
-                torch.cuda.nvtx.range_push(f"optimizer")
                 optimizer.step()
-                torch.cuda.nvtx.range_pop()  # optimizer
 
             if params.distributed:
                 torch.distributed.all_reduce(
@@ -201,7 +267,6 @@ def train(params, args, local_rank, world_rank, world_size):
                 )
             tr_loss.append(loss.item())
 
-            torch.cuda.nvtx.range_pop()  # step
             # lr step
             scheduler.step()
 
@@ -210,70 +275,74 @@ def train(params, args, local_rank, world_rank, world_size):
             dat_time += tr_start - dat_start
             step_count += 1
 
-        torch.cuda.synchronize()  # device sync to ensure accurate epoch timings
-        end = time.time()
+            if step_count % params['print_steps'] == 0: 
+                torch.cuda.synchronize()  # device sync to ensure accurate epoch timings
+                end = time.time()
 
-        if world_rank == 0:
-            iters_per_sec = step_count / (end - start)
-            samples_per_sec = params["global_batch_size"] * iters_per_sec
-            logging.info(
-                "Time taken for epoch %i is %f sec, avg %f samples/sec",
-                epoch + 1,
-                end - start,
-                samples_per_sec,
-            )
-            logging.info("  Avg train loss=%f" % np.mean(tr_loss))
-            args.tboard_writer.add_scalar("Loss/train", np.mean(tr_loss), iters)
-            args.tboard_writer.add_scalar(
-                "Learning Rate", optimizer.param_groups[0]["lr"], iters
-            )
-            args.tboard_writer.add_scalar("Avg iters per sec", iters_per_sec, iters)
-            args.tboard_writer.add_scalar("Avg samples per sec", samples_per_sec, iters)
-            fig = generate_images([inp, tar, gen])
-            args.tboard_writer.add_figure("Visualization, t2m", fig, iters, close=True)
-
-        val_start = time.time()
-        val_loss = torch.zeros(1, device=device)
-        val_rmse = torch.zeros(
-            (params.n_out_channels), dtype=torch.float32, device=device
-        )
-        valid_steps = 0
-        model.eval()
-
-        with torch.inference_mode():
-            with torch.no_grad():
-                for i, data in enumerate(val_data_loader, 0):
-                    with autocast(enabled=params.amp_enabled, dtype=params.amp_dtype):
-                        inp, tar = map(lambda x: x.to(device), data)
-                        gen = model(inp)
-                        val_loss += loss_func(gen, tar)
-                        val_rmse += weighted_rmse(gen, tar)
-                    valid_steps += 1
-
-                if params.distributed:
-                    torch.distributed.all_reduce(
-                        val_loss, op=ReduceOp.AVG, group=comm.get_group("dp")
+                if world_rank == 0:
+                    iters_per_sec = params['print_steps'] / (end - start)
+                    samples_per_sec = params["global_batch_size"] * iters_per_sec
+                    logging.info(
+                        "Time taken for %i steps is %f sec, avg %f samples/sec",
+                        params['print_steps'],
+                        end - start,
+                        samples_per_sec,
                     )
-                    torch.distributed.all_reduce(
-                        val_rmse, op=ReduceOp.AVG, group=comm.get_group("dp")
+                    logging.info("  Avg train loss=%f" % np.mean(tr_loss))
+                    args.tboard_writer.add_scalar("Loss/train", np.mean(tr_loss), iters)
+                    args.tboard_writer.add_scalar(
+                        "Learning Rate", optimizer.param_groups[0]["lr"], iters
                     )
+                    args.tboard_writer.add_scalar("Avg iters per sec", iters_per_sec, iters)
+                    args.tboard_writer.add_scalar("Avg samples per sec", samples_per_sec, iters)
+                    fig = generate_images([inp, tar, gen])
+                    args.tboard_writer.add_figure("Visualization, t2m", fig, iters, close=True)
+                torch.cuda.synchronize()  # device sync to ensure accurate epoch timings
+                start = time.time()
 
-        val_rmse /= valid_steps  # Avg validation rmse
-        val_loss /= valid_steps
-        val_end = time.time()
-        if world_rank == 0:
-            logging.info("  Avg val loss={}".format(val_loss.item()))
-            logging.info("  Total validation time: {} sec".format(val_end - val_start))
-            args.tboard_writer.add_scalar("Loss/valid", val_loss, iters)
-            args.tboard_writer.add_scalar(
-                "RMSE(u10m)/valid", val_rmse.cpu().numpy()[0], iters
-            )
-            args.tboard_writer.flush()
+            if step_count % params['eval_steps'] == 0: 
+                val_start = time.time()
+                val_loss = torch.zeros(1, device=device)
+                val_rmse = torch.zeros(
+                    (params.n_out_channels), dtype=torch.float32, device=device
+                )
+                valid_steps = 0
+                model.eval()
 
+                with torch.inference_mode():
+                    with torch.no_grad():
+                        for i, data in enumerate(val_data_loader, 0):
+                            with autocast(enabled=params.amp_enabled, dtype=params.amp_dtype):
+                                inp, tar = map(lambda x: x.to(device), data)
+                                gen = model(inp)
+                                val_loss += loss_func(gen, tar)
+                                val_rmse += weighted_rmse(gen, tar)
+                            valid_steps += 1
+
+                        if params.distributed:
+                            torch.distributed.all_reduce(
+                                val_loss, op=ReduceOp.AVG, group=comm.get_group("dp")
+                            )
+                            torch.distributed.all_reduce(
+                                val_rmse, op=ReduceOp.AVG, group=comm.get_group("dp")
+                            )
+
+                val_rmse /= valid_steps  # Avg validation rmse
+                val_loss /= valid_steps
+                val_end = time.time()
+                if world_rank == 0:
+                    logging.info("  Avg val loss={}".format(val_loss.item()))
+                    logging.info("  Total validation time: {} sec".format(val_end - val_start))
+                    args.tboard_writer.add_scalar("Loss/valid", val_loss, iters)
+                    args.tboard_writer.add_scalar(
+                        "RMSE(u10m)/valid", val_rmse.cpu().numpy()[0], iters
+                    )
+                    args.tboard_writer.flush()
+
+        save_checkpoint(model, optimizer, scheduler, epoch, params['save_path'])
     torch.cuda.synchronize()
     t2 = time.time()
     tottime = t2 - t1
-    pynvml.nvmlShutdown()
 
 
 if __name__ == "__main__":

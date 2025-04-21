@@ -16,7 +16,8 @@ from distributed.mappings import (
     reduce_scatter_to_parallel_region
 )
 from typing import Tuple
-
+from .ringX_attn import ringX_attn_func
+from .ring_attn import ring_attn_func
 
 class DistributedMatmul(nn.Module):
     """Distributed Matrix Multiply
@@ -152,6 +153,7 @@ class DistributedAttention(nn.Module):
         cp_shapes=None,
         num_heads=8,
         qkv_bias=False,
+        attn_type='megatron',
         attn_drop=0.0,
         proj_drop=0.0
     ):
@@ -201,35 +203,56 @@ class DistributedAttention(nn.Module):
             comm_act_name=comm_cp_name
         )
         self.proj_drop = nn.Dropout(proj_drop)
+        self.cp_group = comm.get_group(self.comm_cp_name)
+        self.attn_type = attn_type
 
     def forward(self, x):
+
         # note: N is local sequence shard if CP is on
         B, N, C = x.shape
-    
-        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
-        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
-        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+       
+        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).to(torch.bfloat16) #.permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).to(torch.bfloat16) #.permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).to(torch.bfloat16) #.permute(0, 2, 1, 3)
+        dtype = x.dtype
 
-        k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-        v = all_gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+        if self.attn_type == 'ringX':
+            #q = q.to(torch.bfloat16)
+            #k = k.to(torch.bfloat16)
+            #v = v.to(torch.bfloat16)
+            x = ringX_attn_func(q, k, v, causal=False, dropout_p=self.attn_drop.p, group=self.cp_group)
+            x = x.reshape(B, N, self.num_heads_local * self.head_dim).to(dtype)
+        elif self.attn_type == 'ring':
+            #q = q.to(torch.bfloat16)
+            #k = k.to(torch.bfloat16)
+            #v = v.to(torch.bfloat16)
+            x = ring_attn_func(q, k, v, causal=False, dropout_p=self.attn_drop.p, group=self.cp_group)
+            x = x.reshape(B, N, self.num_heads_local * self.head_dim).to(dtype)
+        elif self.attn_type == 'megatron':
+            q = q.permute(0, 2, 1, 3)
+            k = k.permute(0, 2, 1, 3)
+            v = v.permute(0, 2, 1, 3)
+            k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+            v = all_gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
 
-        if self.fused_attn:
-            x = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                dropout_p=self.attn_drop.p,
-            )
+            if self.fused_attn:
+                x = F.scaled_dot_product_attention(
+                    q,
+                    k,
+                    v,
+                    dropout_p=self.attn_drop.p,
+                )
+            else:
+                q = q * self.scale
+                attn = q @ k.transpose(-2, -1)
+                attn = attn.softmax(dim=-1)
+                attn = self.attn_drop(attn)
+                x = attn @ v
+            # transpose back
+            x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim).to(dtype)
         else:
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
-
-        # transpose back
-        x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim)
-
+            print("attn_type can only be ringX, ring, or gather")
+            exit(1)
         # this is distributed again
         x = self.proj(x)
 
