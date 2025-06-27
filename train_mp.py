@@ -201,7 +201,7 @@ def train(params, args, local_rank, world_rank, world_size):
                 "RMSE(u10m)/valid", val_rmse.cpu().numpy()[0], 0
             )
 
-    params.num_epochs = params.num_iters // len(train_data_loader)
+    params.num_epochs = max(1, params.num_iters // len(train_data_loader))
 
     print(f"num_epochs: {params.num_epochs}, steps_per_epoch: {len(train_data_loader)}")
 
@@ -237,6 +237,8 @@ def train(params, args, local_rank, world_rank, world_size):
 
             print(f"rank {world_rank}: epoch {epoch} step {step_count}")
             iters += 1
+            if params.num_epochs == 1 and step_count >= params.num_iters: 
+              break
             dat_start = time.time()
 
             inp, tar = map(lambda x: x.to(device), data)

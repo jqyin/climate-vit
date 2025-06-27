@@ -41,12 +41,12 @@ base: &base
 
 mp: &mp
   <<: *base
-  num_iters: 3000
-  eval_steps: 30 
-  print_steps: 5 
+  num_iters: 10
+  eval_steps: 20 
+  print_steps: 2 
   save_path: "./checkpoints"
-  patch_size: 2
-  attn_type: "ringX"
+  patch_size: 8
+  attn_type: "megatron"
   global_batch_size: 512
   lr: 1e-3
   num_data_workers: 2
@@ -58,21 +58,8 @@ mp: &mp
 mp_emb1024: &mp_emb1024
   <<: *mp
   embed_dim: 1024
-  patch_size: 1
   num_heads: 8 
   global_batch_size: 8
-
-mp_emb1024_ring:
-  <<: *mp_emb1024
-  attn_type: "ring"
-
-mp_emb1024_ringX:
-  <<: *mp_emb1024
-  attn_type: "ringX"
-
-mp_emb1024_megatron:
-  <<: *mp_emb1024
-  attn_type: "megatron"
 
 mp_emb2048: &mp_emb2048
   <<: *mp
@@ -80,108 +67,8 @@ mp_emb2048: &mp_emb2048
   num_heads: 16 
   global_batch_size: 4
 
-mp_emb2048_ring:
-  <<: *mp_emb2048
-  attn_type: "ring"
-
-mp_emb2048_ringX:
-  <<: *mp_emb2048
-  attn_type: "ringX"
-
-mp_emb2048_megatron:
-  <<: *mp_emb2048
-  attn_type: "megatron"
-
 mp_emb4096: &mp_emb4096
   <<: *mp
   embed_dim: 4096
   num_heads: 32
   global_batch_size: 1
-
-mp_emb4096_ring:
-  <<: *mp_emb4096
-  attn_type: "ring"
-
-mp_emb4096_ringX:
-  <<: *mp_emb4096
-  attn_type: "ringX"
-
-mp_emb4096_megatron:
-  <<: *mp_emb4096
-  attn_type: "megatron"
-
-
-mp_p1: &mp_p1
-  <<: *mp
-  patch_size: 1
-  global_batch_size: 4
-
-mp_p1_ringX:
-  <<: *mp_p1
-  attn_type: "ringX"
-
-mp_p1_ring:
-  <<: *mp_p1
-  attn_type: "ring"
-
-mp_p1_megatron:
-  <<: *mp_p1
-  attn_type: "megatron"
-
-mp_p2: &mp_p2
-  <<: *mp
-  patch_size: 2
-  global_batch_size: 16
-
-mp_p2_ringX:
-  <<: *mp_p2
-  attn_type: "ringX"
-
-mp_p2_ring:
-  <<: *mp_p2
-  attn_type: "ring"
-
-mp_p2_megatron:
-  <<: *mp_p2
-  attn_type: "megatron"
-
-mp_p4: &mp_p4
-  <<: *mp
-  patch_size: 4
-  global_batch_size: 64
-
-mp_p4_ringX:
-  <<: *mp_p4
-  attn_type: "ringX"
-
-mp_p4_ring:
-  <<: *mp_p4
-  attn_type: "ring"
-
-mp_p4_megatron:
-  <<: *mp_p4
-  attn_type: "megatron"
-
-mp_p6: &mp_p6
-  <<: *mp
-  patch_size: 6
-  global_batch_size: 96
-
-mp_p6_ringX:
-  <<: *mp_p6
-  attn_type: "ringX"
-
-mp_p6_ring:
-  <<: *mp_p6
-  attn_type: "ring"
-
-mp_p6_megatron:
-  <<: *mp_p6
-  attn_type: "megatron"
-
-
-
-
-
-
-
