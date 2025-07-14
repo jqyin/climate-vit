@@ -55,6 +55,18 @@ mp: &mp
   enable_jit: true
   enable_fused: true
 
+mp_emb384: &mp_emb384
+  <<: *mp
+  embed_dim: 384
+  num_heads: 4
+  global_batch_size: 32
+
+mp_emb768: &mp_emb768
+  <<: *mp
+  embed_dim: 768
+  num_heads: 8
+  global_batch_size: 16  
+  
 mp_emb1024: &mp_emb1024
   <<: *mp
   embed_dim: 1024
